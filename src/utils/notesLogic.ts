@@ -706,4 +706,98 @@ export function buildPrintableNoteHtml(
   `.trim();
 }
 
+export interface EditorHistoryEntry {
+  content: string;
+  selectionStart: number;
+  selectionEnd: number;
+}
+
+export interface EditorHistoryState {
+  past: EditorHistoryEntry[];
+  present: EditorHistoryEntry;
+  future: EditorHistoryEntry[];
+}
+
+/**
+ * Creates an initial Undo/Redo history state for a note's Markdown content.
+ */
+export function createInitialHistoryState(
+  content: string,
+  selectionStart = content.length,
+  selectionEnd = content.length
+): EditorHistoryState {
+  return {
+    past: [],
+    present: { content, selectionStart, selectionEnd },
+    future: [],
+  };
+}
+
+/**
+ * Pushes a new content snapshot onto the Undo history stack and clears Redo future.
+ */
+export function pushEditorHistory(
+  state: EditorHistoryState,
+  nextEntry: EditorHistoryEntry,
+  maxHistory = 100
+): EditorHistoryState {
+  if (state.present.content === nextEntry.content) {
+    return {
+      ...state,
+      present: nextEntry,
+    };
+  }
+  const nextPast = [...state.past, state.present].slice(-maxHistory);
+  return {
+    past: nextPast,
+    present: nextEntry,
+    future: [],
+  };
+}
+
+/**
+ * Steps backward one entry in the editor history stack (Undo).
+ */
+export function undoEditorHistory(state: EditorHistoryState): {
+  nextState: EditorHistoryState;
+  restored: EditorHistoryEntry | null;
+} {
+  if (state.past.length === 0) {
+    return { nextState: state, restored: null };
+  }
+  const previous = state.past[state.past.length - 1];
+  const newPast = state.past.slice(0, -1);
+  return {
+    nextState: {
+      past: newPast,
+      present: previous,
+      future: [state.present, ...state.future],
+    },
+    restored: previous,
+  };
+}
+
+/**
+ * Steps forward one entry in the editor history stack (Redo).
+ */
+export function redoEditorHistory(state: EditorHistoryState): {
+  nextState: EditorHistoryState;
+  restored: EditorHistoryEntry | null;
+} {
+  if (state.future.length === 0) {
+    return { nextState: state, restored: null };
+  }
+  const next = state.future[0];
+  const newFuture = state.future.slice(1);
+  return {
+    nextState: {
+      past: [...state.past, state.present],
+      present: next,
+      future: newFuture,
+    },
+    restored: next,
+  };
+}
+
+
 

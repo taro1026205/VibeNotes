@@ -12,7 +12,8 @@ import {
   Quote,
   Link2,
   Terminal,
-  FolderInput,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import {
   NoteItem,
@@ -26,6 +27,11 @@ import {
   MarkdownSuggestion,
   MARKDOWN_SNIPPETS,
   computeSyncedScrollTop,
+  EditorHistoryState,
+  createInitialHistoryState,
+  pushEditorHistory,
+  undoEditorHistory,
+  redoEditorHistory,
 } from '../utils/notesLogic';
 
 export type EditorViewMode = 'edit' | 'split' | 'preview';
@@ -63,6 +69,9 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
   const [autocompleteCtx, setAutocompleteCtx] =
     useState<ActiveAutocompleteContext | null>(null);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
+  const [historyByNoteId, setHistoryByNoteId] = useState<
+    Record<string, EditorHistoryState>
+  >({});
 
   const releaseScrollLockLater = () => {
     if (scrollReleaseTimerRef.current !== null) {
@@ -136,12 +145,91 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
 
   const renderedHtml = renderMarkdownToHtml(note.content);
 
+  const currentHistory =
+    historyByNoteId[note.id] || createInitialHistoryState(note.content);
+  const canUndo = currentHistory.past.length > 0;
+  const canRedo = currentHistory.future.length > 0;
+
+  const recordContentChange = (
+    nextContent: string,
+    nextSelectionStart: number,
+    nextSelectionEnd: number
+  ) => {
+    setHistoryByNoteId((prev) => {
+      const existing =
+        prev[note.id] ||
+        createInitialHistoryState(
+          note.content,
+          textareaRef.current?.selectionStart ?? note.content.length,
+          textareaRef.current?.selectionEnd ?? note.content.length
+        );
+      return {
+        ...prev,
+        [note.id]: pushEditorHistory(existing, {
+          content: nextContent,
+          selectionStart: nextSelectionStart,
+          selectionEnd: nextSelectionEnd,
+        }),
+      };
+    });
+    onUpdateNote(note.id, { content: nextContent });
+  };
+
+  const handleUndo = () => {
+    const existing =
+      historyByNoteId[note.id] || createInitialHistoryState(note.content);
+    const { nextState, restored } = undoEditorHistory(existing);
+    if (!restored) return;
+
+    setHistoryByNoteId((prev) => ({
+      ...prev,
+      [note.id]: nextState,
+    }));
+    onUpdateNote(note.id, { content: restored.content });
+    setAutocompleteCtx(null);
+
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(restored.selectionStart, restored.selectionEnd);
+        setSelectionLength(
+          Math.max(0, restored.selectionEnd - restored.selectionStart)
+        );
+      }
+    });
+  };
+
+  const handleRedo = () => {
+    const existing =
+      historyByNoteId[note.id] || createInitialHistoryState(note.content);
+    const { nextState, restored } = redoEditorHistory(existing);
+    if (!restored) return;
+
+    setHistoryByNoteId((prev) => ({
+      ...prev,
+      [note.id]: nextState,
+    }));
+    onUpdateNote(note.id, { content: restored.content });
+    setAutocompleteCtx(null);
+
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(restored.selectionStart, restored.selectionEnd);
+        setSelectionLength(
+          Math.max(0, restored.selectionEnd - restored.selectionStart)
+        );
+      }
+    });
+  };
+
   const insertMarkdownSyntax = (prefix: string, suffix = '', defaultText = 'text') => {
     const el = textareaRef.current;
     if (!el) {
-      onUpdateNote(note.id, {
-        content: `${note.content}\n${prefix}${defaultText}${suffix}`,
-      });
+      const nextContent = `${note.content}\n${prefix}${defaultText}${suffix}`;
+      recordContentChange(nextContent, nextContent.length, nextContent.length);
       return;
     }
 
@@ -154,7 +242,7 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
       defaultText
     );
 
-    onUpdateNote(note.id, { content: updatedContent });
+    recordContentChange(updatedContent, nextSelectionStart, nextSelectionEnd);
     setAutocompleteCtx(null);
 
     requestAnimationFrame(() => {
@@ -174,7 +262,7 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
       suggestion
     );
 
-    onUpdateNote(note.id, { content: updatedContent });
+    recordContentChange(updatedContent, nextCursorPosition, nextCursorPosition);
     setAutocompleteCtx(null);
     setSelectedSuggestionIndex(0);
 
@@ -204,7 +292,7 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const nextValue = e.target.value;
     const cursorPos = e.target.selectionStart;
-    onUpdateNote(note.id, { content: nextValue });
+    recordContentChange(nextValue, cursorPos, e.target.selectionEnd);
 
     const nextCtx = getMarkdownAutocompleteSuggestions(nextValue, cursorPos);
     setAutocompleteCtx(nextCtx);
@@ -254,6 +342,16 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
 
     if (e.metaKey || e.ctrlKey) {
       const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+      if ((key === 'z' && e.shiftKey) || key === 'y') {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
       if (key === 'b') {
         e.preventDefault();
         insertMarkdownSyntax('**', '**', 'bold text');
@@ -389,6 +487,32 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
                 data-testid="floating-markdown-toolbar"
                 className="inline-flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-[var(--surface)] border-[1.5px] border-[var(--ink)] shadow-[3px_3px_0px_var(--ink)] self-start"
               >
+                {/* Undo & Redo Group */}
+                <button
+                  type="button"
+                  onClick={handleUndo}
+                  disabled={!canUndo}
+                  aria-label="Undo"
+                  title="Undo (⌘Z / Ctrl+Z)"
+                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] disabled:opacity-35 disabled:pointer-events-none transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                  <span>Undo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRedo}
+                  disabled={!canRedo}
+                  aria-label="Redo"
+                  title="Redo (⌘⇧Z / Ctrl+Y)"
+                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] disabled:opacity-35 disabled:pointer-events-none transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <Redo2 className="w-3.5 h-3.5" />
+                  <span>Redo</span>
+                </button>
+
+                <span className="h-4 w-px bg-[var(--ink-faint)] mx-1" aria-hidden="true" />
+
                 {/* Headers Group */}
                 <button
                   type="button"
