@@ -8,13 +8,13 @@ Tài liệu này trình bày các quyết định lựa chọn công nghệ, ki�
 - **Quyết định**: Xây dựng dưới dạng Single-Page Application (SPA) với **React 19**, **TypeScript**, và **Vite**.
 - **Lý do**:
   - Tốc độ phản hồi tức thì khi chuyển đổi giữa các ghi chú, tìm kiếm thời gian thực (real-time search) theo **Tiêu đề / Nội dung / Filter** và chuyển chế độ xem (`Edit` / `Split` / `Preview`) mà không phải tải lại trang.
-  - TypeScript đảm bảo an toàn kiểu dữ liệu cho cấu trúc ghi chú (`NoteItem`), bộ lọc (`NoteTag`), lịch sử chỉnh sửa (`EditorHistoryState`), danh mục phím tắt (`ShortcutInfoItem`) và trạng thái đồng bộ Google Keep, giảm thiểu lỗi runtime khi phát triển nhanh trong 1 tuần.
+  - TypeScript đảm bảo an toàn kiểu dữ liệu cho cấu trúc ghi chú (`NoteItem`), bộ lọc (`NoteTag`), lịch sử chỉnh sửa (`EditorHistoryState`), lịch sử phiên bản cục bộ (`NoteVersionSnapshot`), danh mục phím tắt (`ShortcutInfoItem`) và trạng thái đồng bộ Google Keep.
 
-## 2. Lưu trữ Dữ liệu Cục bộ: Browser `localStorage` (Local-First)
-- **Quyết định**: Sử dụng **`localStorage`** làm tầng lưu trữ chính kết hợp cơ chế tự động lưu (auto-save) ngay trên mỗi thao tác gõ phím.
+## 2. Lưu trữ Dữ liệu Cục bộ & Hệ thống Lịch sử Phiên bản (`localStorage` + `Restore previous version`)
+- **Quyết định**: Sử dụng **`localStorage`** làm tầng lưu trữ chính cho danh sách ghi chú (`vibenotes_workspace_notes_v1`), danh sách filter (`vibenotes_custom_filters_v1`), và ngăn xếp lịch sử phiên bản của từng ghi chú (`vibenotes_version_history_v1`, giới hạn `MAX_NOTE_VERSIONS = 10` bản/ghi chú) kèm nút **`Restore previous version`** trên thanh điều khiển trình soạn thảo.
 - **Lý do**:
-  - **Không cần cài đặt database server phức tạp**, độ trễ lưu trữ bằng `0ms`, dữ liệu bền vững ngay cả khi làm mới trang (F5) hoặc mất kết nối mạng.
-  - Rất phù hợp với phạm vi phát triển nhanh trong thời gian ngắn nhưng vẫn đảm bảo trải nghiệm mượt mà, khởi chạy lập tức.
+  - **Không cần cài đặt database server phức tạp**, độ trễ lưu trữ bằng `0ms`, dữ liệu và lịch sử phiên bản bền vững ngay cả khi làm mới trang (F5) hoặc mất kết nối mạng.
+  - Khi người dùng sửa nội dung hoặc tiêu đề, hàm thuần túy `recordNoteVersionSnapshot` tự động đẩy bản ghi trước đó vào ngăn xếp (loại bỏ trùng lặp liên tiếp và giới hạn 10 phiên bản gần nhất để bảo vệ dung lượng `localStorage`). Khi nhấn **`Restore previous version`**, hàm `restorePreviousNoteVersion` lấy ra bản ghi gần nhất và khôi phục tức thì.
 
 ## 3. Xử lý & Soạn thảo Markdown: `marked` + Floating Toolbar, Auto-complete & Undo/Redo Stack
 - **Quyết định**: Kết hợp thư viện **`marked`** để render HTML với bộ công cụ tự xây dựng gồm **Floating Formatting Toolbar**, **Cursor-aware Markdown Auto-completion**, và **Ngăn xếp Lịch sử Undo/Redo (`EditorHistoryState`)** ngay trên `<textarea>` gốc.
@@ -60,7 +60,7 @@ Tài liệu này trình bày các quyết định lựa chọn công nghệ, ki�
 
 ## 10. Kiểm thử Logic Cốt lõi (`/tests`) & Quản lý Tiến độ (`/docs`)
 - **Quyết định**:
-  - Tách toàn bộ nghiệp vụ tìm kiếm, lọc, sắp xếp, thống kê từ, chèn Markdown, auto-complete, Undo/Redo, đồng bộ cuộn, phân giải phím tắt và xuất PDF thành các hàm thuần túy (pure functions) trong `src/utils/notesLogic.ts` và tổ chức kiểm thử tập trung trong thư mục **`/tests`**.
+  - Tách toàn bộ nghiệp vụ tìm kiếm, lọc, sắp xếp, thống kê từ, chèn Markdown, auto-complete, Undo/Redo, lịch sử phiên bản `localStorage` (`recordNoteVersionSnapshot`, `restorePreviousNoteVersion`), đồng bộ cuộn, phân giải phím tắt và xuất PDF thành các hàm thuần túy (pure functions) trong `src/utils/notesLogic.ts` và tổ chức kiểm thử tập trung trong thư mục **`/tests`**.
   - Đóng gói toàn bộ tài liệu kế hoạch phân rã công việc (`PROJECT_PLAN_WBS.md`, `PROJECT_PLAN_WBS.csv`) và nhật ký tiến độ hàng ngày (`DAILY_LOG.md`) vào thư mục **`/docs`** để giữ thư mục gốc gọn gàng.
 - **Lý do**:
-  - Chạy toàn bộ 8 Unit Test Suites (`tests/unit/notesLogic.unit.test.ts`) và 3 Integration Test Suites (`tests/integration/workspaceFlow.integration.test.ts`) qua `npm test` dưới 1 giây, kết hợp bảng 10 kịch bản kiểm thử thủ công (`tests/MANUAL_TEST_CASES.md`) giúp đảm bảo chất lượng đầu-cuối.
+  - Chạy toàn bộ 9 Unit Test Suites (`tests/unit/notesLogic.unit.test.ts`) và 3 Integration Test Suites (`tests/integration/workspaceFlow.integration.test.ts`) qua `npm test` dưới 1 giây, kết hợp bảng 11 kịch bản kiểm thử thủ công (`tests/MANUAL_TEST_CASES.md`) giúp đảm bảo chất lượng đầu-cuối.

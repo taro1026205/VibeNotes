@@ -7,7 +7,7 @@ Trong công việc kỹ thuật và học tập hàng ngày, người dùng thư
 2. **Các nền tảng quản lý tri thức đồ sộ (như Notion, Obsidian)**: Hỗ trợ Markdown mạnh mẽ nhưng thời gian khởi động chậm, giao diện nhiều tầng phức tạp, hoặc đòi hỏi cài đặt phần mềm/đồng bộ đám mây bắt buộc trước khi có thể gõ dòng đầu tiên.
 
 **VibeNotes** được xây dựng như một **Mini-App Workspace chuyên biệt (Local-First Markdown & Keep Studio)** nhằm giải quyết bài toán thực tế đó:
-- Mở trình duyệt là viết ngay lập tức với **độ trễ lưu trữ `0ms`** vào `localStorage`.
+- Mở trình duyệt là viết ngay lập tức với **độ trễ lưu trữ `0ms`** vào `localStorage`, kèm **hệ thống lưu lịch sử phiên bản cục bộ (`Local Note Version History` — nút `Restore previous version`)** giúp khôi phục các trạng thái nội dung trước đó ngay cả sau khi tải lại trang.
 - Hỗ trợ soạn thảo Markdown tốc độ cao nhờ **thanh công cụ định dạng nổi (Floating Toolbar)** tích hợp **Undo / Redo**, **gợi ý cú pháp thông minh theo vị trí con trỏ (`/`, `#`, `-`, `>`)**, **chế độ xem song song (Split View) đồng bộ cuộn hai chiều**, và **bảng tra cứu phím tắt nhanh (Keyboard Shortcuts Cheat-Sheet Modal — `Cmd/Ctrl + /`)** cho các thao tác tạo mới (`Cmd/Ctrl + N`), chuyển chế độ xem (`Cmd/Ctrl + E`), ghim ghi chú (`Cmd/Ctrl + P`) và tìm kiếm (`Cmd/Ctrl + K`).
 - **Trải nghiệm Đa thiết bị mượt mà (Notion-inspired Mobile & Tablet UX)**: Tự động thích ứng giữa giao diện **Slide-over Drawer** trên Điện thoại/Tablet (`< 1024px`) và **Docked Sidebar** trên Desktop (`>= 1024px`), thanh công cụ định dạng vuốt ngang 1 hàng (`Touch-Swipeable Toolbar`), chế độ `Split` thích ứng thông minh (chia 50/50 dọc trên Mobile, 50/50 ngang trên Tablet/Desktop), và cuộn cảm ứng quán tính mượt (`100dvh` + `smooth-touch-scroll`).
 - Tổ chức ghi chú linh hoạt bằng **Filter tùy chỉnh (tạo/xoá/kéo-thả)**, tìm kiếm tức thì theo **Tiêu đề / Nội dung / Filter**, xuất file **`.pdf` chuẩn A4** hoặc **`.md`**, và kết nối với **Google Keep** khi cần đồng bộ nhanh.
@@ -18,7 +18,7 @@ Trong công việc kỹ thuật và học tập hàng ngày, người dùng thư
 
 ### 2.1. Lý do Chọn Phạm vi MVP (Scope Justification)
 Với quỹ thời gian phát triển **1 tuần**, thay vì dàn trải vào hệ thống tài khoản backend riêng, chia sẻ thời gian thực nhiều người dùng (multi-user collaboration) hay quản lý thư mục đa cấp phức tạp, dự án tập trung tối đa vào **độ ổn định và trải nghiệm cốt lõi của cá nhân khi viết & tra cứu ghi chú trên cả Desktop, Tablet và Mobile**:
-- **Ưu tiên 1 (Core CRUD & Persistence)**: Thêm (`Cmd/Ctrl + N`), đọc, sửa, xoá ghi chú, ghim ghi chú (`Cmd/Ctrl + P`) và tự động lưu `localStorage` an toàn 100%.
+- **Ưu tiên 1 (Core CRUD, Persistence & Local Version History)**: Thêm (`Cmd/Ctrl + N`), đọc, sửa, xoá ghi chú, ghim ghi chú (`Cmd/Ctrl + P`), tự động lưu `localStorage` và lưu ngăn xếp các phiên bản trước đó (`Restore previous version`).
 - **Ưu tiên 2 (Trải nghiệm Soạn thảo Markdown, Phím tắt & Đa thiết bị)**: Thanh công cụ nhanh, Undo/Redo (`Cmd/Ctrl + Z`, `Cmd/Ctrl + Y`), gợi ý cú pháp tự động (Auto-complete), chuyển đổi chế độ xem (`Cmd/Ctrl + E`), bảng Cheat-Sheet phím tắt (`ShortcutsModal`), Split-view đồng bộ cuộn hai chiều, và bố cục Responsive chuẩn Notion cho Mobile/Tablet.
 - **Ưu tiên 3 (Phân loại & Tìm kiếm)**: Tạo/xoá Filter động (trừ `All`), gắn filter bằng 1 cú nhấp hoặc kéo-thả, tìm kiếm tức thì (`Cmd/Ctrl + K`) theo `Tiêu đề / Nội dung / Filter`.
 - **Ưu tiên 4 (Trích xuất & Đồng bộ)**: Xuất file `.md`, xuất file `.pdf` định dạng A4, và tích hợp Google Keep kèm cơ chế Import/Export JSON dự phòng.
@@ -39,10 +39,11 @@ flowchart LR
         UC5("Tìm kiếm theo Tiêu đề / Nội dung / Filter (Cmd/Ctrl + K)")
         UC6("Xuất tài liệu (.PDF / .MD)")
         UC9("Tra cứu Bảng Phím tắt Cheat-Sheet (Cmd/Ctrl + /)")
+        UC10("Khôi phục Phiên bản cũ (Restore Previous Version)")
     end
 
     subgraph Sync["Đồng bộ & Lưu trữ"]
-        UC7("Tự động lưu LocalStorage")
+        UC7("Tự động lưu LocalStorage & Ngăn xếp Phiên bản")
         UC8("Đồng bộ Google Keep / JSON Backup")
     end
 
@@ -53,8 +54,10 @@ flowchart LR
     User --> UC5
     User --> UC6
     User --> UC9
+    User --> UC10
     UC1 --> UC7
     UC4 --> UC7
+    UC10 --> UC7
     User --> UC8
 ```
 
@@ -89,6 +92,14 @@ classDiagram
         +EditorHistoryEntry[] future
     }
 
+    class NoteVersionSnapshot {
+        +string id
+        +string noteId
+        +string title
+        +string content
+        +string savedAt
+    }
+
     class ShortcutInfoItem {
         +string id
         +ShortcutCategory category
@@ -115,6 +126,8 @@ classDiagram
         +pushEditorHistory(state, nextEntry) EditorHistoryState
         +undoEditorHistory(state) EditorHistoryEntry
         +redoEditorHistory(state) EditorHistoryEntry
+        +recordNoteVersionSnapshot(historyMap, prevNote, changes) NoteVersionHistoryMap
+        +restorePreviousNoteVersion(historyMap, noteId) NoteVersionSnapshot
         +computeSyncedScrollTop(srcTop, srcH, srcClientH, tgtH, tgtClientH) number
         +cycleEditorViewMode(currentMode) EditorViewMode
         +resolveGlobalShortcutAction(event) GlobalShortcutAction
@@ -122,9 +135,11 @@ classDiagram
     }
 
     NoteItem "*" --> "1" NoteTag : phân loại theo (tag -> id)
+    NoteItem "1" --> "*" NoteVersionSnapshot : lưu lịch sử phiên bản (localStorage)
     WorkspaceEngine ..> NoteItem : xử lý & lưu localStorage
     WorkspaceEngine ..> NoteTag : quản lý Filter
     WorkspaceEngine ..> EditorHistoryState : quản lý Undo/Redo
+    WorkspaceEngine ..> NoteVersionSnapshot : quản lý Restore Previous Version
     WorkspaceEngine ..> ShortcutInfoItem : cung cấp Cheat-Sheet phím tắt
     WorkspaceEngine ..> NoteMetrics : tính toán thống kê
 ```
@@ -136,7 +151,7 @@ classDiagram
 | Hạng mục | Mục tiêu ban đầu (1 tuần) | Kết quả đạt được | Trạng thái |
 | :--- | :--- | :--- | :--- |
 | **Quản lý Ghi chú (CRUD)** | Thêm, xem, sửa, xoá (có xác nhận), ghim ghi chú ưu tiên lên đầu. | Hoạt động ổn định, phản hồi tức thì, hỗ trợ cả nút bấm lẫn phím tắt (`Cmd/Ctrl + N`, `Cmd/Ctrl + P`) và modal xác nhận xoá. | **Hoàn thành 100%** |
-| **Lưu trữ Cục bộ (`localStorage`)** | Tự động lưu ghi chú, danh sách filter và giao diện Sáng/Tối khi reload trang. | Tự động lưu với độ trễ `0ms` trên từng thao tác gõ phím. | **Hoàn thành 100%** |
+| **Lưu trữ Cục bộ & Lịch sử Phiên bản (`localStorage`)** | Tự động lưu ghi chú, filter, theme và lưu ngăn xếp các phiên bản nội dung trước đó. | Tự động lưu với độ trễ `0ms`, kèm ngăn xếp `vibenotes_version_history_v1` (tối đa 10 bản/ghi chú) và nút **`Restore previous version`**. | **Hoàn thành 100%** |
 | **Trình soạn thảo Markdown & Undo/Redo** | Hỗ trợ Markdown, thanh công cụ nổi, gợi ý cú pháp tự động (`/`, `#`, `-`, `>`), Undo/Redo. | Đầy đủ Floating Toolbar, Auto-complete theo con trỏ, Undo/Redo bằng nút bấm & phím tắt (`⌘Z`/`Ctrl+Z`, `⌘⇧Z`/`Ctrl+Y`). | **Hoàn thành 100%** |
 | **Bảng Tra cứu Phím tắt (`ShortcutsModal`)** | Có hộp thoại `Info` hiển thị bảng Cheat-Sheet phím tắt trực quan. | Hộp thoại `Keyboard Shortcuts Cheat-Sheet` 2 cột (`Cmd/Ctrl + /` hoặc nút `Shortcuts`), hỗ trợ đầy đủ 10 phím tắt toàn cục & trình soạn thảo. | **Hoàn thành 100%** |
 | **Chế độ Xem & Đồng bộ Cuộn** | Chuyển đổi `Edit` / `Split` / `Preview` (`Cmd/Ctrl + E`), cuộn bên nào bên kia tự cuộn theo. | Đồng bộ cuộn hai chiều theo tỷ lệ phần trăm kèm khoá chống lặp sự kiện (`Anti-bounce Lock`). | **Hoàn thành 100%** |
@@ -154,9 +169,9 @@ classDiagram
 
 Trong quá trình phát triển dự án trong 1 tuần, 4 rủi ro kỹ thuật và phạm vi đã được nhận diện sớm kèm giải pháp ứng phó dứt điểm:
 
-### Rủi ro 1: Scope Creep & Mất lịch sử Undo mặc định khi thao tác trên `<textarea>` có điều khiển (Controlled Textarea)
-- **Vấn đề**: Việc tích hợp các thư viện editor đồ sộ (Monaco/ProseMirror) dễ gây xung đột state và tăng kích thước bundle; trong khi nếu dùng `<textarea>` có điều khiển bởi React state thì khi chèn cú pháp từ thanh công cụ, lịch sử Undo mặc định của trình duyệt sẽ bị xoá.
-- **Hành động ứng phó**: Giữ kiến trúc `<textarea>` gốc kết hợp thư viện **`marked`**, đồng thời xây dựng ngăn xếp lịch sử **`EditorHistoryState` (`pushEditorHistory`, `undoEditorHistory`, `redoEditorHistory`)** trong `notesLogic.ts`. Nhờ đó vừa nhẹ, vừa hỗ trợ Undo/Redo chính xác cho cả gõ phím, thanh công cụ nổi lẫn gợi ý Auto-complete.
+### Rủi ro 1: Scope Creep & Mất lịch sử Undo / Phiên bản khi thao tác trên `<textarea>` có điều khiển
+- **Vấn đề**: Việc tích hợp các thư viện editor đồ sộ (Monaco/ProseMirror) dễ gây xung đột state và tăng kích thước bundle; trong khi nếu dùng `<textarea>` có điều khiển bởi React state thì khi chèn cú pháp từ thanh công cụ hoặc tải lại trang (`F5`), lịch sử Undo mặc định của trình duyệt sẽ bị xoá.
+- **Hành động ứng phó**: Giữ kiến trúc `<textarea>` gốc kết hợp thư viện **`marked`**, đồng thời xây dựng 2 tầng bảo vệ: (1) Ngăn xếp **`EditorHistoryState`** (`Undo`/`Redo` tức thì kèm vị trí con trỏ) và (2) Ngăn xếp **`NoteVersionHistoryMap`** lưu bền vững trong `localStorage` (`vibenotes_version_history_v1`, giới hạn `MAX_NOTE_VERSIONS = 10` bản/ghi chú để không tràn bộ nhớ) kèm nút **`Restore previous version`**.
 
 ### Rủi ro 2: Lỗi mất dấu Tiếng Việt khi xuất PDF bằng font mặc định của `jsPDF`
 - **Vấn đề**: Phương thức `pdf.text()` mặc định của `jsPDF` chỉ hỗ trợ bảng mã ASCII chuẩn, dẫn đến lỗi hiển thị ký tự tiếng Việt có dấu và mất định dạng bảng biểu/code block của Markdown.
@@ -176,19 +191,19 @@ Trong quá trình phát triển dự án trong 1 tuần, 4 rủi ro kỹ thuật
 
 ### 5.1. Tự Đánh giá Ngắn
 - **Điểm mạnh**:
-  - **Kiến trúc tách biệt & Kiểm thử đầy đủ**: Toàn bộ logic cốt lõi (tìm kiếm đa trường, lọc, thống kê từ, chèn Markdown, gợi ý cú pháp, ngăn xếp Undo/Redo, tính toán vị trí cuộn đồng bộ, chuẩn hoá tên file PDF, phân giải phím tắt toàn cục) được tách thành pure functions trong `src/utils/notesLogic.ts` và được kiểm thử tự động trong thư mục **`/tests`** (**11/11** test suites gồm cả **Unit Tests**, **Integration Tests** và tài liệu **Manual Test Cases**).
-  - **Trải nghiệm UX/UI nhất quán trên cả Desktop, Tablet & Mobile**: Thiết kế phong cách Editorial kết hợp bố cục linh hoạt kiểu Notion, tích hợp hộp thoại **Keyboard Shortcuts Cheat-Sheet (`ShortcutsModal`)** hỗ trợ đầy đủ phím tắt (`Cmd/Ctrl + N`, `Cmd/Ctrl + E`, `Cmd/Ctrl + P`, `Cmd/Ctrl + K`, `Cmd/Ctrl + /`, `Cmd/Ctrl + B`, `Cmd/Ctrl + I`, `Cmd/Ctrl + Z`, `Cmd/Ctrl + Y`), đồng bộ cuộn hai chiều mượt mà ở chế độ Split và xử lý an toàn khi xoá filter.
+  - **Kiến trúc tách biệt & Kiểm thử đầy đủ**: Toàn bộ logic cốt lõi (tìm kiếm đa trường, lọc, thống kê từ, chèn Markdown, gợi ý cú pháp, ngăn xếp Undo/Redo, ngăn xếp lịch sử phiên bản `localStorage`, tính toán vị trí cuộn đồng bộ, chuẩn hoá tên file PDF, phân giải phím tắt toàn cục) được tách thành pure functions trong `src/utils/notesLogic.ts` và được kiểm thử tự động trong thư mục **`/tests`** (**12/12** test suites gồm cả **Unit Tests**, **Integration Tests** và tài liệu **Manual Test Cases**).
+  - **Trải nghiệm UX/UI nhất quán trên cả Desktop, Tablet & Mobile**: Thiết kế phong cách Editorial kết hợp bố cục linh hoạt kiểu Notion, tích hợp hộp thoại **Keyboard Shortcuts Cheat-Sheet (`ShortcutsModal`)**, nút **`Restore previous version`** và đồng bộ cuộn hai chiều mượt mà ở chế độ Split.
 - **Điểm yếu**:
-  - Dung lượng lưu trữ của `localStorage` giới hạn ở mức khoảng `5MB`, chưa phù hợp nếu người dùng lưu hàng nghìn ghi chú dài kèm ảnh base64.
+  - Dung lượng lưu trữ của `localStorage` giới hạn ở mức khoảng `5MB`, nên ngăn xếp phiên bản hiện giới hạn tối đa `10` bản ghi gần nhất cho mỗi ghi chú (`MAX_NOTE_VERSIONS = 10`).
   - Đồng bộ cuộn hai chiều hiện tính theo tỷ lệ phần trăm chiều cao tổng thể (`scrollTop / maxScroll`), có thể lệch nhẹ vài dòng nếu ghi chú chứa một bảng hoặc khối mã quá dài ở một phía.
 
 ### 5.2. Bài học Kinh nghiệm (Lessons Learned)
-1. **Tách Pure Logic trước khi làm UI**: Việc viết và kiểm thử các hàm xử lý văn bản, bộ lọc, ngăn xếp Undo/Redo, phân giải phím tắt và tính toán tỷ lệ cuộn trong `notesLogic.ts` giúp phát hiện sớm các trường hợp biên (như gõ ký tự `?` bên trong ô `<textarea>` không được kích hoạt nhầm bảng phím tắt).
+1. **Tách Pure Logic trước khi làm UI**: Việc viết và kiểm thử các hàm xử lý văn bản, bộ lọc, ngăn xếp Undo/Redo, lịch sử phiên bản `localStorage` và phân giải phím tắt trong `notesLogic.ts` giúp phát hiện sớm các trường hợp biên (như xoá ghi chú thì tự động dọn sạch lịch sử phiên bản của ghi chú đó).
 2. **Thiết kế Responsive ưu tiên cảm ứng (Touch-First Adaptation)**: Trên thiết bị di động, việc ẩn các nút thao tác sau `hover` hoặc để thanh công cụ tự xuống dòng sẽ làm giảm mạnh diện tích soạn thảo; sử dụng ngăn kéo trượt và thanh công cụ vuốt ngang 1 hàng giúp giữ trọn không gian viết.
 
 ### 5.3. Hướng Phát triển Tiếp theo nếu có thêm 1 tuần (Future Work)
 Nếu có thêm **1 tuần** phát triển, dự án sẽ ưu tiên nâng cấp theo thứ tự sau:
-1. **Chuyển tầng lưu trữ sang `IndexedDB`**: Mở rộng dung lượng lưu trữ cục bộ từ `5MB` lên hàng trăm MB, hỗ trợ lưu lịch sử phiên bản bền vững (Persistent Version History) qua các lần đóng trình duyệt.
+1. **Chuyển tầng lưu trữ sang `IndexedDB` kèm Diff Viewer**: Mở rộng dung lượng lưu trữ cục bộ từ `5MB` lên hàng trăm MB và hiển thị giao diện so sánh trực quan (Side-by-side Diff) giữa các phiên bản trong lịch sử trước khi nhấn `Restore`.
 2. **Đồng bộ cuộn theo mốc dòng (Line-Map Scroll Sync)**: Gắn thuộc tính `data-source-line` vào từng khối HTML do `marked` sinh ra để đồng bộ vị trí cuộn chính xác tuyệt đối theo từng đoạn văn/tiêu đề.
 3. **Tuỳ biến Phím tắt Cá nhân (Customizable Keybindings)**: Cho phép người dùng tuỳ chỉnh lại các tổ hợp phím ngay trong `ShortcutsModal` và lưu cấu hình vào `localStorage`.
 
@@ -204,9 +219,9 @@ Toàn bộ tài liệu kiến trúc, bảng phân rã công việc (WBS), nhật
   - **[`docs/PROJECT_PLAN_WBS.csv`](docs/PROJECT_PLAN_WBS.csv)**: File CSV chuẩn hoá để Import trực tiếp vào **Excel / Google Sheets / Notion / Trello**.
   - **[`docs/DAILY_LOG.md`](docs/DAILY_LOG.md)**: Nhật ký công việc hàng ngày (Daily Standup Log: hôm qua làm gì, hôm nay làm gì, vướng mắc & hướng xử lý, kèm commit message).
 - **Thư mục [`/tests`](tests/)**: Bộ kiểm thử tự động & thủ công:
-  - **[`tests/unit/notesLogic.unit.test.ts`](tests/unit/notesLogic.unit.test.ts)**: 8 Unit Test Suites cho các hàm xử lý logic chính.
+  - **[`tests/unit/notesLogic.unit.test.ts`](tests/unit/notesLogic.unit.test.ts)**: 9 Unit Test Suites cho các hàm xử lý logic chính.
   - **[`tests/integration/workspaceFlow.integration.test.ts`](tests/integration/workspaceFlow.integration.test.ts)**: 3 Integration Test Suites kiểm tra luồng nghiệp vụ đầu-cuối.
-  - **[`tests/MANUAL_TEST_CASES.md`](tests/MANUAL_TEST_CASES.md)**: Bảng 10 kịch bản kiểm thử thủ công (`TC-01` $\rightarrow$ `TC-10`).
+  - **[`tests/MANUAL_TEST_CASES.md`](tests/MANUAL_TEST_CASES.md)**: Bảng 11 kịch bản kiểm thử thủ công (`TC-01` $\rightarrow$ `TC-11`).
 
 ### Lệnh Chạy Dự án & Kiểm thử
 
@@ -217,7 +232,7 @@ npm install
 # 2. Chạy ứng dụng ở môi trường phát triển (Port 3000)
 npm run dev
 
-# 3. Chạy toàn bộ bộ kiểm thử tự động (11/11 Unit & Integration Tests trong thư mục /tests)
+# 3. Chạy toàn bộ bộ kiểm thử tự động (12/12 Unit & Integration Tests trong thư mục /tests)
 npm test
 
 # 4. Kiểm tra biên dịch TypeScript & Build Production

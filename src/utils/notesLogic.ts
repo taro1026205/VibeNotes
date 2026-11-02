@@ -943,6 +943,106 @@ export function resolveGlobalShortcutAction(event: {
   return null;
 }
 
+export const MAX_NOTE_VERSIONS = 10;
 
+export interface NoteVersionSnapshot {
+  id: string;
+  noteId: string;
+  title: string;
+  content: string;
+  savedAt: string;
+}
 
+export type NoteVersionHistoryMap = Record<string, NoteVersionSnapshot[]>;
 
+/**
+ * Returns the saved version history stack for a specific note ID.
+ */
+export function getNoteVersionStack(
+  historyMap: NoteVersionHistoryMap,
+  noteId: string
+): NoteVersionSnapshot[] {
+  return historyMap[noteId] || [];
+}
+
+/**
+ * Records a previous note state onto the bounded version history stack for that note
+ * whenever title or content changes.
+ */
+export function recordNoteVersionSnapshot(
+  historyMap: NoteVersionHistoryMap,
+  previousNote: Pick<NoteItem, 'id' | 'title' | 'content'>,
+  nextChanges: { title?: string; content?: string },
+  maxVersions = MAX_NOTE_VERSIONS
+): NoteVersionHistoryMap {
+  const nextTitle =
+    nextChanges.title !== undefined ? nextChanges.title : previousNote.title;
+  const nextContent =
+    nextChanges.content !== undefined
+      ? nextChanges.content
+      : previousNote.content;
+
+  if (
+    nextTitle === previousNote.title &&
+    nextContent === previousNote.content
+  ) {
+    return historyMap;
+  }
+
+  const existingStack = historyMap[previousNote.id] || [];
+  const lastSnapshot =
+    existingStack.length > 0 ? existingStack[existingStack.length - 1] : null;
+
+  if (
+    lastSnapshot &&
+    lastSnapshot.title === previousNote.title &&
+    lastSnapshot.content === previousNote.content
+  ) {
+    return historyMap;
+  }
+
+  const snapshot: NoteVersionSnapshot = {
+    id: `ver-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    noteId: previousNote.id,
+    title: previousNote.title,
+    content: previousNote.content,
+    savedAt: new Date().toISOString(),
+  };
+
+  const nextStack = [...existingStack, snapshot].slice(-maxVersions);
+
+  return {
+    ...historyMap,
+    [previousNote.id]: nextStack,
+  };
+}
+
+/**
+ * Pops and returns the most recent previous version snapshot for a note.
+ */
+export function restorePreviousNoteVersion(
+  historyMap: NoteVersionHistoryMap,
+  noteId: string
+): {
+  updatedHistoryMap: NoteVersionHistoryMap;
+  restoredSnapshot: NoteVersionSnapshot | null;
+} {
+  const existingStack = historyMap[noteId] || [];
+  if (existingStack.length === 0) {
+    return {
+      updatedHistoryMap: historyMap,
+      restoredSnapshot: null,
+    };
+  }
+
+  const restoredSnapshot = existingStack[existingStack.length - 1];
+  const remainingStack = existingStack.slice(0, -1);
+
+  return {
+    updatedHistoryMap: {
+      ...historyMap,
+      [noteId]: remainingStack,
+    },
+    restoredSnapshot,
+  };
+}

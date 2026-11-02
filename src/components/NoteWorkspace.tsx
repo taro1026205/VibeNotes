@@ -18,6 +18,7 @@ import {
   PenLine,
   Columns2,
   Eye,
+  History,
 } from 'lucide-react';
 import {
   NoteItem,
@@ -53,6 +54,8 @@ interface NoteWorkspaceProps {
   onCreateNote: () => void;
   onExportPdf: () => void;
   isExportingPdf?: boolean;
+  previousVersionsCount?: number;
+  onRestorePreviousVersion?: () => void;
 }
 
 export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
@@ -68,6 +71,8 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
   onCreateNote,
   onExportPdf,
   isExportingPdf = false,
+  previousVersionsCount = 0,
+  onRestorePreviousVersion,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const previewScrollRef = useRef<HTMLDivElement | null>(null);
@@ -449,11 +454,11 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
             </select>
           </div>
 
-          <span className="hidden xl:inline editorial-label opacity-25" aria-hidden="true">
+          <span className="hidden 2xl:inline editorial-label opacity-25" aria-hidden="true">
             |
           </span>
 
-          <span className="hidden xl:inline editorial-label truncate">
+          <span className="hidden 2xl:inline editorial-label truncate">
             Type / or #, -, &gt; for syntax suggestions
             {selectionLength > 0 ? ` · ${selectionLength} chars selected` : ''}
           </span>
@@ -482,6 +487,25 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={onRestorePreviousVersion}
+            disabled={previousVersionsCount === 0}
+            aria-label="Restore previous version"
+            title={
+              previousVersionsCount > 0
+                ? `Restore previous version (${previousVersionsCount} saved in localStorage)`
+                : 'No previous versions saved for this note yet'
+            }
+            className="inline-flex items-center gap-1 text-[0.6rem] font-mono uppercase tracking-wider border border-[var(--ink-faint)] hover:border-[var(--ink)] text-[var(--ink)] px-2 py-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <History className="w-3 h-3" />
+            <span>
+              Restore previous version
+              {previousVersionsCount > 0 ? ` (${previousVersionsCount})` : ''}
+            </span>
+          </button>
 
           <button
             type="button"

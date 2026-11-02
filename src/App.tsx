@@ -16,6 +16,10 @@ import {
   getTagMetadata,
   cycleEditorViewMode,
   resolveGlobalShortcutAction,
+  NoteVersionHistoryMap,
+  getNoteVersionStack,
+  recordNoteVersionSnapshot,
+  restorePreviousNoteVersion,
 } from './utils/notesLogic';
 import { exportNoteToPdf } from './utils/pdfExport';
 import { initAuth, googleSignIn, logout } from './services/keepService';
@@ -27,6 +31,7 @@ import { ShortcutsModal } from './components/ShortcutsModal';
 
 const STORAGE_KEY = 'vibenotes_workspace_notes_v1';
 const FILTERS_STORAGE_KEY = 'vibenotes_custom_filters_v1';
+const VERSION_HISTORY_STORAGE_KEY = 'vibenotes_version_history_v1';
 const THEME_KEY = 'vibenotes_theme_v2';
 
 export default function App() {
@@ -60,6 +65,22 @@ export default function App() {
       console.error('Failed to load custom filters from localStorage:', e);
     }
     return TAG_CATEGORIES;
+  });
+
+  // 2b. Local Note Version History stack persisted to localStorage
+  const [versionHistory, setVersionHistory] = useState<NoteVersionHistoryMap>(() => {
+    try {
+      const raw = localStorage.getItem(VERSION_HISTORY_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load version history from localStorage:', e);
+    }
+    return {};
   });
 
   // 3. Theme state (Variation 2 warm paper light mode by default, with full dark mode toggle)
@@ -105,6 +126,18 @@ export default function App() {
       console.error('Failed to save filters to localStorage:', e);
     }
   }, [allFilters]);
+
+  // Persist note version history stack to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        VERSION_HISTORY_STORAGE_KEY,
+        JSON.stringify(versionHistory)
+      );
+    } catch (e) {
+      console.error('Failed to save version history to localStorage:', e);
+    }
+  }, [versionHistory]);
 
   // 4. Active Note, Search, Filter, View Mode & Responsive Sidebar Drawer State
   const [activeNoteId, setActiveNoteId] = useState<string | null>(() =>
@@ -223,9 +256,43 @@ export default function App() {
 
   const handleUpdateNote = (id: string, changes: Partial<NoteItem>) => {
     const now = new Date().toISOString();
+    if (changes.title !== undefined || changes.content !== undefined) {
+      const existingNote = notes.find((n) => n.id === id);
+      if (existingNote) {
+        setVersionHistory((prevHistory) =>
+          recordNoteVersionSnapshot(prevHistory, existingNote, {
+            title: changes.title,
+            content: changes.content,
+          })
+        );
+      }
+    }
     setNotes((prev) =>
       prev.map((note) =>
         note.id === id ? { ...note, ...changes, updatedAt: now } : note
+      )
+    );
+  };
+
+  const handleRestorePreviousVersion = (id: string) => {
+    const { updatedHistoryMap, restoredSnapshot } = restorePreviousNoteVersion(
+      versionHistory,
+      id
+    );
+    if (!restoredSnapshot) return;
+
+    const now = new Date().toISOString();
+    setVersionHistory(updatedHistoryMap);
+    setNotes((prev) =>
+      prev.map((note) =>
+        note.id === id
+          ? {
+              ...note,
+              title: restoredSnapshot.title,
+              content: restoredSnapshot.content,
+              updatedAt: now,
+            }
+          : note
       )
     );
   };
@@ -296,6 +363,12 @@ export default function App() {
         setActiveNoteId(remaining.length > 0 ? remaining[0].id : null);
       }
       return remaining;
+    });
+    setVersionHistory((prev) => {
+      if (!prev[deletedId]) return prev;
+      const next = { ...prev };
+      delete next[deletedId];
+      return next;
     });
     setNoteToDelete(null);
   };
@@ -519,6 +592,12 @@ export default function App() {
         onCreateNote={handleCreateNote}
         onExportPdf={handleExportPdf}
         isExportingPdf={isExportingPdf}
+        previousVersionsCount={
+          activeNote ? getNoteVersionStack(versionHistory, activeNote.id).length : 0
+        }
+        onRestorePreviousVersion={() =>
+          activeNote && handleRestorePreviousVersion(activeNote.id)
+        }
       />
 
       {/* Full-Width Editorial Footer */}

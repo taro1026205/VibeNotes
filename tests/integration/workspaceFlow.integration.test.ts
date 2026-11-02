@@ -20,9 +20,13 @@ import {
   KEYBOARD_SHORTCUTS,
   cycleEditorViewMode,
   resolveGlobalShortcutAction,
+  NoteVersionHistoryMap,
+  recordNoteVersionSnapshot,
+  restorePreviousNoteVersion,
+  getNoteVersionStack,
 } from '../../src/utils/notesLogic';
 
-test('[Integration Flow 1] Note Authoring -> Toolbar Formatting -> Auto-Complete -> Undo/Redo -> PDF Export HTML', () => {
+test('[Integration Flow 1] Note Authoring -> Toolbar Formatting -> Auto-Complete -> Undo/Redo -> Local Version Restore -> PDF Export HTML', () => {
   // Step 1: User creates a new note
   let note = createNewNoteItem({
     title: 'Tài liệu Kiến trúc Hệ thống',
@@ -30,8 +34,9 @@ test('[Integration Flow 1] Note Authoring -> Toolbar Formatting -> Auto-Complete
     tag: 'indigo',
   });
   let history = createInitialHistoryState(note.content);
+  let versionHistoryMap: NoteVersionHistoryMap = {};
 
-  // Step 2: User inserts Bold text via Floating Toolbar
+  // Step 2: User inserts Bold text via Floating Toolbar (records previous version in versionHistoryMap)
   const boldRes = applyMarkdownInsertion(
     note.content,
     note.content.length,
@@ -40,6 +45,9 @@ test('[Integration Flow 1] Note Authoring -> Toolbar Formatting -> Auto-Complete
     '**',
     'Local-First Storage'
   );
+  versionHistoryMap = recordNoteVersionSnapshot(versionHistoryMap, note, {
+    content: boldRes.updatedContent,
+  });
   note = { ...note, content: boldRes.updatedContent };
   history = pushEditorHistory(history, {
     content: note.content,
@@ -47,6 +55,7 @@ test('[Integration Flow 1] Note Authoring -> Toolbar Formatting -> Auto-Complete
     selectionEnd: boldRes.nextSelectionEnd,
   });
   assert.ok(note.content.includes('**Local-First Storage**'));
+  assert.equal(getNoteVersionStack(versionHistoryMap, note.id).length, 1);
 
   // Step 3: User types a slash command '/task' at the end of a new line and applies auto-completion
   const contentWithTrigger = `${note.content}\n/task`;
@@ -60,6 +69,9 @@ test('[Integration Flow 1] Note Authoring -> Toolbar Formatting -> Auto-Complete
 
   if (ctx && taskSnippet) {
     const autoRes = applyAutocompleteSuggestion(contentWithTrigger, ctx, taskSnippet);
+    versionHistoryMap = recordNoteVersionSnapshot(versionHistoryMap, note, {
+      content: autoRes.updatedContent,
+    });
     note = { ...note, content: autoRes.updatedContent };
     history = pushEditorHistory(history, {
       content: note.content,
@@ -68,15 +80,25 @@ test('[Integration Flow 1] Note Authoring -> Toolbar Formatting -> Auto-Complete
     });
   }
   assert.ok(note.content.includes('- [ ] '));
+  assert.equal(getNoteVersionStack(versionHistoryMap, note.id).length, 2);
 
-  // Step 4: User triggers Undo -> reverts the task checklist insertion
+  // Step 4: User clicks 'Restore previous version' -> reverts from task list back to bold-only version
+  const restoredVer = restorePreviousNoteVersion(versionHistoryMap, note.id);
+  assert.ok(restoredVer.restoredSnapshot);
+  versionHistoryMap = restoredVer.updatedHistoryMap;
+  assert.equal(
+    restoredVer.restoredSnapshot?.content.includes('**Local-First Storage**'),
+    true
+  );
+  assert.equal(getNoteVersionStack(versionHistoryMap, note.id).length, 1);
+
+  // Step 5: User triggers Undo/Redo on editor history stack
   const afterUndo = undoEditorHistory(history);
   assert.ok(afterUndo.restored);
   note = { ...note, content: afterUndo.restored!.content };
   history = afterUndo.nextState;
   assert.equal(note.content.includes('- [ ] '), false);
 
-  // Step 5: User triggers Redo -> restores the task checklist insertion
   const afterRedo = redoEditorHistory(history);
   assert.ok(afterRedo.restored);
   note = { ...note, content: afterRedo.restored!.content };

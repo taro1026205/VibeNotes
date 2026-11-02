@@ -24,6 +24,11 @@ import {
   KEYBOARD_SHORTCUTS,
   cycleEditorViewMode,
   resolveGlobalShortcutAction,
+  MAX_NOTE_VERSIONS,
+  NoteVersionHistoryMap,
+  getNoteVersionStack,
+  recordNoteVersionSnapshot,
+  restorePreviousNoteVersion,
 } from '../../src/utils/notesLogic';
 
 const mockNotes: NoteItem[] = [
@@ -214,4 +219,54 @@ test('[Unit] KEYBOARD_SHORTCUTS, cycleEditorViewMode, and resolveGlobalShortcutA
     null
   );
 });
+
+test('[Unit] Local note version history stack records snapshots and restores previous versions up to MAX_NOTE_VERSIONS', () => {
+  let historyMap: NoteVersionHistoryMap = {};
+  const baseNote = {
+    id: 'note-ver-1',
+    title: 'Draft v1',
+    content: 'Content v1',
+  };
+
+  // Recording with identical content should be a no-op
+  historyMap = recordNoteVersionSnapshot(historyMap, baseNote, {
+    content: 'Content v1',
+  });
+  assert.equal(getNoteVersionStack(historyMap, 'note-ver-1').length, 0);
+
+  // Recording when content changes to v2 pushes v1 onto the stack
+  historyMap = recordNoteVersionSnapshot(historyMap, baseNote, {
+    content: 'Content v2',
+  });
+  assert.equal(getNoteVersionStack(historyMap, 'note-ver-1').length, 1);
+  assert.equal(getNoteVersionStack(historyMap, 'note-ver-1')[0].content, 'Content v1');
+
+  // Recording when content changes from v2 to v3 pushes v2 onto the stack
+  historyMap = recordNoteVersionSnapshot(
+    historyMap,
+    { ...baseNote, content: 'Content v2' },
+    { content: 'Content v3' }
+  );
+  assert.equal(getNoteVersionStack(historyMap, 'note-ver-1').length, 2);
+
+  // Restoring pops the most recent version (v2) first, then v1
+  const restore1 = restorePreviousNoteVersion(historyMap, 'note-ver-1');
+  assert.equal(restore1.restoredSnapshot?.content, 'Content v2');
+  assert.equal(
+    getNoteVersionStack(restore1.updatedHistoryMap, 'note-ver-1').length,
+    1
+  );
+
+  const restore2 = restorePreviousNoteVersion(
+    restore1.updatedHistoryMap,
+    'note-ver-1'
+  );
+  assert.equal(restore2.restoredSnapshot?.content, 'Content v1');
+  assert.equal(
+    getNoteVersionStack(restore2.updatedHistoryMap, 'note-ver-1').length,
+    0
+  );
+  assert.equal(MAX_NOTE_VERSIONS, 10);
+});
+
 
