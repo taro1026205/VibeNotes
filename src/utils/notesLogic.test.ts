@@ -8,6 +8,9 @@ import {
   applyMarkdownInsertion,
   getMarkdownAutocompleteSuggestions,
   applyAutocompleteSuggestion,
+  createCustomFilter,
+  moveNoteToFilter,
+  TAG_CATEGORIES,
   NoteItem,
 } from './notesLogic';
 
@@ -125,4 +128,28 @@ test('getMarkdownAutocompleteSuggestions and applyAutocompleteSuggestion suggest
   const slashCtx = getMarkdownAutocompleteSuggestions(textWithSlash, textWithSlash.length);
   assert.ok(slashCtx);
   assert.ok(slashCtx.suggestions.some((s) => s.id === 'task' || s.id === 'table'));
+});
+
+test('createCustomFilter creates a new filter and moveNoteToFilter moves notes into it', () => {
+  const { updatedFilters, createdFilter, error } = createCustomFilter(
+    TAG_CATEGORIES,
+    'Sprint 14'
+  );
+  assert.equal(error, undefined);
+  assert.ok(createdFilter);
+  assert.equal(createdFilter.label, 'Sprint 14');
+  assert.equal(updatedFilters.length, TAG_CATEGORIES.length + 1);
+
+  const movedNotes = moveNoteToFilter(sampleNotes, '1', createdFilter.id);
+  const movedTarget = movedNotes.find((n) => n.id === '1');
+  assert.equal(movedTarget?.tag, createdFilter.id);
+
+  const filteredByCustom = filterAndSortNotes(
+    movedNotes,
+    '',
+    createdFilter.id,
+    updatedFilters
+  );
+  assert.equal(filteredByCustom.length, 1);
+  assert.equal(filteredByCustom[0].id, '1');
 });

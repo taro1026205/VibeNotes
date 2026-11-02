@@ -1,12 +1,13 @@
 import { marked } from 'marked';
 
-export type TagColor = 'indigo' | 'emerald' | 'amber' | 'rose' | 'sky';
+export type TagColor = string;
 
 export interface NoteTag {
   id: TagColor;
   label: string;
   dotClass: string;
   activeTextClass: string;
+  isCustom?: boolean;
 }
 
 export const TAG_CATEGORIES: NoteTag[] = [
@@ -64,8 +65,8 @@ Welcome to **VibeNotes**, a distraction-free workspace combining crisp Markdown 
 ## Core Design Principles
 
 1. **Zero-Latency Local Storage**: Every keystroke is persisted immediately to \`localStorage\`.
-2. **Typography First**: Built with *Plus Jakarta Sans* for structural headings, *DM Sans* for long-form reading, and *JetBrains Mono* for code and metrics.
-3. **Structured Categorization**: Pin priority notes to the top or filter by domain categories.
+2. **Typography First**: Built with *Cormorant Garamond* for structural headings, *DM Sans* for long-form reading, and *Space Mono* for code and metrics.
+3. **Structured Categorization**: Pin priority notes to the top, create custom filters, or move notes across filters effortlessly.
 
 ### Key Milestones
 
@@ -128,7 +129,7 @@ A curated list of books and essays on software craft, architecture, and cognitiv
 | Concept | Application in VibeNotes | Impact |
 | :--- | :--- | :--- |
 | Local-First State | Instant \`localStorage\` writes | 0ms perceived save latency |
-| Visual Hierarchy | High-contrast slate surfaces | Reduced eye strain in dark mode |
+| Visual Hierarchy | High-contrast surfaces | Reduced eye strain |
 | Explicit Mutations | Confirmation modal before cloud changes | Zero accidental data loss |`,
     tag: 'amber',
     pinned: false,
@@ -154,15 +155,104 @@ Before cutting the weekly production release, verify the following items:
 ];
 
 /**
+ * Returns tag metadata for a given TagColor from provided filters list (or default TAG_CATEGORIES)
+ */
+export function getTagMetadata(
+  tag: TagColor,
+  allFilters: NoteTag[] = TAG_CATEGORIES
+): NoteTag {
+  return (
+    allFilters.find((t) => t.id === tag) || {
+      id: tag,
+      label: tag.charAt(0).toUpperCase() + tag.slice(1),
+      dotClass: 'bg-indigo-500',
+      activeTextClass: 'text-indigo-600 dark:text-indigo-400',
+      isCustom: true,
+    }
+  );
+}
+
+/**
+ * Creates a new custom filter and appends it to existingFilters if not already present.
+ */
+export function createCustomFilter(
+  existingFilters: NoteTag[],
+  rawLabel: string
+): {
+  updatedFilters: NoteTag[];
+  createdFilter: NoteTag | null;
+  error?: string;
+} {
+  const label = rawLabel.trim();
+  if (!label) {
+    return {
+      updatedFilters: existingFilters,
+      createdFilter: null,
+      error: 'Filter name cannot be empty.',
+    };
+  }
+
+  const duplicate = existingFilters.find(
+    (f) => f.label.toLowerCase() === label.toLowerCase()
+  );
+  if (duplicate) {
+    return {
+      updatedFilters: existingFilters,
+      createdFilter: duplicate,
+      error: `Filter "${duplicate.label}" already exists.`,
+    };
+  }
+
+  const slug =
+    'filter-' +
+    label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') +
+    '-' +
+    Math.random().toString(36).slice(2, 5);
+
+  const createdFilter: NoteTag = {
+    id: slug,
+    label,
+    dotClass: 'bg-indigo-500',
+    activeTextClass: 'text-indigo-600 dark:text-indigo-400',
+    isCustom: true,
+  };
+
+  return {
+    updatedFilters: [...existingFilters, createdFilter],
+    createdFilter,
+  };
+}
+
+/**
+ * Moves a note (by noteId) to a target filter (targetFilterId) and updates its timestamp.
+ */
+export function moveNoteToFilter(
+  notes: NoteItem[],
+  noteId: string,
+  targetFilterId: TagColor
+): NoteItem[] {
+  const now = new Date().toISOString();
+  return notes.map((note) =>
+    note.id === noteId
+      ? { ...note, tag: targetFilterId, updatedAt: now }
+      : note
+  );
+}
+
+/**
  * Filters and sorts notes:
- * - Filters by searchQuery (matching title or content, case-insensitive)
+ * - Filters by searchQuery (matching title, content, or filter label, case-insensitive)
  * - Filters by selectedTag ('all' or specific TagColor)
  * - Sorts pinned notes first, then by updatedAt descending
  */
 export function filterAndSortNotes(
   notes: NoteItem[],
   searchQuery: string,
-  selectedTag: TagColor | 'all'
+  selectedTag: TagColor | 'all',
+  allFilters: NoteTag[] = TAG_CATEGORIES
 ): NoteItem[] {
   const normalizedQuery = searchQuery.trim().toLowerCase();
 
@@ -174,7 +264,7 @@ export function filterAndSortNotes(
       if (!normalizedQuery) return true;
       const inTitle = note.title.toLowerCase().includes(normalizedQuery);
       const inContent = note.content.toLowerCase().includes(normalizedQuery);
-      const tagLabel = getTagMetadata(note.tag).label.toLowerCase();
+      const tagLabel = getTagMetadata(note.tag, allFilters).label.toLowerCase();
       const inTag = tagLabel.includes(normalizedQuery);
       return inTitle || inContent || inTag;
     })
@@ -231,18 +321,11 @@ export function extractPlainTextSnippet(markdown: string, maxLength = 96): strin
 }
 
 /**
- * Returns tag metadata for a given TagColor
- */
-export function getTagMetadata(tag: TagColor): NoteTag {
-  return TAG_CATEGORIES.find((t) => t.id === tag) || TAG_CATEGORIES[0];
-}
-
-/**
  * Renders Markdown string to HTML safely using marked
  */
 export function renderMarkdownToHtml(markdown: string): string {
   if (!markdown.trim()) {
-    return '<p class="text-slate-400 dark:text-slate-500 italic">Nothing to preview yet. Start typing Markdown in the editor...</p>';
+    return '<p class="text-[var(--ink-medium)] italic">Nothing to preview yet. Start typing Markdown in the editor...</p>';
   }
   const rawHtml = marked.parse(markdown, { async: false, gfm: true, breaks: true }) as string;
   return rawHtml;
@@ -510,5 +593,3 @@ export function applyAutocompleteSuggestion(
     nextCursorPosition,
   };
 }
-
-

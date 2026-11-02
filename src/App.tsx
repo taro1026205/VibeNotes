@@ -2,11 +2,15 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import {
   INITIAL_NOTES,
+  TAG_CATEGORIES,
   NoteItem,
+  NoteTag,
   TagColor,
   filterAndSortNotes,
   createNewNoteItem,
   computeNoteMetrics,
+  createCustomFilter,
+  moveNoteToFilter,
 } from './utils/notesLogic';
 import { initAuth, googleSignIn, logout } from './services/keepService';
 import { Sidebar } from './components/Sidebar';
@@ -15,6 +19,7 @@ import { GoogleKeepDrawer } from './components/GoogleKeepDrawer';
 import { ConfirmDialog } from './components/ConfirmDialog';
 
 const STORAGE_KEY = 'vibenotes_workspace_notes_v1';
+const FILTERS_STORAGE_KEY = 'vibenotes_custom_filters_v1';
 const THEME_KEY = 'vibenotes_theme_v2';
 
 export default function App() {
@@ -34,7 +39,23 @@ export default function App() {
     return INITIAL_NOTES;
   });
 
-  // 2. Theme state (Variation 2 warm paper light mode by default, with full dark mode toggle)
+  // 2. Filters / Categories state (default + user-created custom filters)
+  const [allFilters, setAllFilters] = useState<NoteTag[]>(() => {
+    try {
+      const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load custom filters from localStorage:', e);
+    }
+    return TAG_CATEGORIES;
+  });
+
+  // 3. Theme state (Variation 2 warm paper light mode by default, with full dark mode toggle)
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem(THEME_KEY);
@@ -69,7 +90,16 @@ export default function App() {
     }
   }, [notes]);
 
-  // 3. Active Note, Search, Filter & View Mode State
+  // Persist filters to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(allFilters));
+    } catch (e) {
+      console.error('Failed to save filters to localStorage:', e);
+    }
+  }, [allFilters]);
+
+  // 4. Active Note, Search, Filter & View Mode State
   const [activeNoteId, setActiveNoteId] = useState<string | null>(() =>
     notes.length > 0 ? notes[0].id : null
   );
@@ -77,10 +107,10 @@ export default function App() {
   const [selectedTag, setSelectedTag] = useState<TagColor | 'all'>('all');
   const [viewMode, setViewMode] = useState<EditorViewMode>('split');
 
-  // 4. Delete Confirmation Modal State
+  // 5. Delete Confirmation Modal State
   const [noteToDelete, setNoteToDelete] = useState<NoteItem | null>(null);
 
-  // 5. Google Keep Integration & Auth State
+  // 6. Google Keep Integration & Auth State
   const [isKeepDrawerOpen, setIsKeepDrawerOpen] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(true);
   const [user, setUser] = useState<User | null>(null);
@@ -115,8 +145,8 @@ export default function App() {
   }, []);
 
   const filteredNotes = useMemo(
-    () => filterAndSortNotes(notes, searchQuery, selectedTag),
-    [notes, searchQuery, selectedTag]
+    () => filterAndSortNotes(notes, searchQuery, selectedTag, allFilters),
+    [notes, searchQuery, selectedTag, allFilters]
   );
 
   const activeNote = useMemo(
@@ -130,6 +160,32 @@ export default function App() {
   );
 
   // Handlers
+  const handleCreateFilter = (label: string): { ok: boolean; error?: string } => {
+    const { updatedFilters, createdFilter, error } = createCustomFilter(
+      allFilters,
+      label
+    );
+    if (error || !createdFilter) {
+      return { ok: false, error };
+    }
+    setAllFilters(updatedFilters);
+    return { ok: true };
+  };
+
+  const handleDeleteCustomFilter = (filterId: TagColor) => {
+    setAllFilters((prev) => prev.filter((f) => f.id !== filterId));
+    setNotes((prev) =>
+      prev.map((n) => (n.tag === filterId ? { ...n, tag: 'indigo' } : n))
+    );
+    if (selectedTag === filterId) {
+      setSelectedTag('all');
+    }
+  };
+
+  const handleMoveNoteToFilter = (noteId: string, targetFilterId: TagColor) => {
+    setNotes((prev) => moveNoteToFilter(prev, noteId, targetFilterId));
+  };
+
   const handleCreateNote = () => {
     const newNote = createNewNoteItem({
       tag: selectedTag === 'all' ? 'indigo' : selectedTag,
@@ -302,11 +358,16 @@ export default function App() {
       {/* Left Pane: Sidebar */}
       <Sidebar
         notes={filteredNotes}
+        allNotesCount={notes.length}
+        allFilters={allFilters}
         activeNoteId={activeNoteId}
         searchQuery={searchQuery}
         selectedTag={selectedTag}
         onSearchChange={setSearchQuery}
         onSelectTag={setSelectedTag}
+        onCreateFilter={handleCreateFilter}
+        onDeleteCustomFilter={handleDeleteCustomFilter}
+        onMoveNoteToFilter={handleMoveNoteToFilter}
         onSelectNote={setActiveNoteId}
         onCreateNote={handleCreateNote}
         onTogglePin={handleTogglePin}
@@ -317,9 +378,11 @@ export default function App() {
       {/* Right Pane: Main Editor & Preview */}
       <NoteWorkspace
         note={activeNote}
+        allFilters={allFilters}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         onUpdateNote={handleUpdateNote}
+        onMoveNoteToFilter={handleMoveNoteToFilter}
         onRequestDeleteNote={(n) => handleRequestDeleteNote(n)}
         onCreateNote={handleCreateNote}
       />

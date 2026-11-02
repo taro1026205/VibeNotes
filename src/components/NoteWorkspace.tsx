@@ -12,11 +12,12 @@ import {
   Quote,
   Link2,
   Terminal,
+  FolderInput,
 } from 'lucide-react';
 import {
   NoteItem,
+  NoteTag,
   TagColor,
-  TAG_CATEGORIES,
   renderMarkdownToHtml,
   applyMarkdownInsertion,
   getMarkdownAutocompleteSuggestions,
@@ -30,18 +31,22 @@ export type EditorViewMode = 'edit' | 'split' | 'preview';
 
 interface NoteWorkspaceProps {
   note: NoteItem | null;
+  allFilters: NoteTag[];
   viewMode: EditorViewMode;
   onViewModeChange: (mode: EditorViewMode) => void;
   onUpdateNote: (id: string, changes: Partial<NoteItem>) => void;
+  onMoveNoteToFilter: (noteId: string, targetFilterId: TagColor) => void;
   onRequestDeleteNote: (note: NoteItem) => void;
   onCreateNote: () => void;
 }
 
 export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
   note,
+  allFilters,
   viewMode,
   onViewModeChange,
   onUpdateNote,
+  onMoveNoteToFilter,
   onRequestDeleteNote,
   onCreateNote,
 }) => {
@@ -208,25 +213,27 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
 
   return (
     <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-[var(--surface)]">
-      {/* Top Workspace Metadata & View Mode Bar */}
+      {/* Top Workspace Filter & View Mode Bar */}
       <div className="px-8 py-3 border-b border-[var(--ink-faint)] flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4 flex-wrap">
-          <label htmlFor="note-category-select" className="sr-only">
-            Note Category
-          </label>
-          <select
-            id="note-category-select"
-            value={note.tag}
-            onChange={(e) => onUpdateNote(note.id, { tag: e.target.value as TagColor })}
-            aria-label="Select note category"
-            className="editorial-label bg-transparent border border-[var(--ink-faint)] px-2 py-1 text-[var(--ink)] focus:outline-none focus:border-[var(--ink)] cursor-pointer"
-          >
-            {TAG_CATEGORIES.map((cat) => (
-              <option key={cat.id} value={cat.id} className="bg-[var(--surface)] text-[var(--ink)]">
-                {cat.label}
-              </option>
-            ))}
-          </select>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="inline-flex items-center">
+            <label htmlFor="note-category-select" className="sr-only">
+              Select filter
+            </label>
+            <select
+              id="note-category-select"
+              value={note.tag}
+              onChange={(e) => onMoveNoteToFilter(note.id, e.target.value as TagColor)}
+              aria-label="Select note filter"
+              className="editorial-label bg-transparent border border-[var(--ink-faint)] hover:border-[var(--ink)] px-2 py-1 text-[var(--ink)] focus:outline-none focus:border-[var(--ink)] cursor-pointer"
+            >
+              {allFilters.map((cat) => (
+                <option key={cat.id} value={cat.id} className="bg-[var(--surface)] text-[var(--ink)]">
+                  {cat.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <span className="editorial-label opacity-25" aria-hidden="true">
             |
