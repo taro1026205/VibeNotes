@@ -11,6 +11,7 @@ import {
   createCustomFilter,
   deleteFilterFromList,
   moveNoteToFilter,
+  computeSyncedScrollTop,
   TAG_CATEGORIES,
   NoteItem,
 } from './notesLogic';
@@ -150,3 +151,13 @@ test('createCustomFilter, deleteFilterFromList, and moveNoteToFilter manage all 
   assert.equal(afterDelete.some((f) => f.id === 'indigo'), false);
   assert.equal(notesAfterDelete.find((n) => n.id === '3')?.tag, 'emerald');
 });
+
+test('computeSyncedScrollTop maps scroll position proportionally in both directions', () => {
+  // 50% scrolled in source (scrollTop 200 out of max 400) -> 50% in target (max 800 -> 400)
+  assert.equal(computeSyncedScrollTop(200, 1000, 600, 1400, 600), 400);
+  // 100% scrolled in source -> 100% in target
+  assert.equal(computeSyncedScrollTop(400, 1000, 600, 1400, 600), 800);
+  // Non-scrollable pane returns 0 safely
+  assert.equal(computeSyncedScrollTop(0, 500, 600, 1400, 600), 0);
+});
+

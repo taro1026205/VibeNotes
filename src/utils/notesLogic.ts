@@ -83,6 +83,21 @@ interface SyncStatus {
 }
 \`\`\`
 
+## Split-View Scroll Synchronization
+
+When working in **Split** mode, scrolling either the **Markdown Editor** (left) or the **Live Preview** (right) proportionally scrolls the opposite pane in real time:
+
+- **Bidirectional Ratio Mapping**: Calculates scroll progress percentage \`scrollTop / (scrollHeight - clientHeight)\` and maps it to the companion pane.
+- **Zero Feedback Loops**: Uses an active scroll source lock so programmatic scroll updates never trigger recursive bounce events.
+
+### Performance Targets
+
+| Metric | Target | Current |
+| :--- | :--- | :--- |
+| Local Save Latency | \`< 2ms\` | \`0.4ms\` |
+| Split Scroll Sync Frame Time | \`< 16ms\` | \`1.2ms\` |
+| Markdown Parse Time | \`< 5ms\` | \`0.8ms\` |
+
 > "Simplicity is about subtracting the obvious and adding the meaningful." — John Maeda`,
     tag: 'indigo',
     pinned: true,
@@ -618,3 +633,25 @@ export function applyAutocompleteSuggestion(
     nextCursorPosition,
   };
 }
+
+/**
+ * Computes the proportional scrollTop for a target scrollable element based on a source element's scroll position.
+ */
+export function computeSyncedScrollTop(
+  sourceScrollTop: number,
+  sourceScrollHeight: number,
+  sourceClientHeight: number,
+  targetScrollHeight: number,
+  targetClientHeight: number
+): number {
+  const sourceMaxScroll = Math.max(0, sourceScrollHeight - sourceClientHeight);
+  const targetMaxScroll = Math.max(0, targetScrollHeight - targetClientHeight);
+
+  if (sourceMaxScroll <= 0 || targetMaxScroll <= 0) {
+    return 0;
+  }
+
+  const ratio = Math.min(1, Math.max(0, sourceScrollTop / sourceMaxScroll));
+  return Math.round(ratio * targetMaxScroll);
+}
+

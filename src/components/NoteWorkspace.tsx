@@ -25,6 +25,7 @@ import {
   ActiveAutocompleteContext,
   MarkdownSuggestion,
   MARKDOWN_SNIPPETS,
+  computeSyncedScrollTop,
 } from '../utils/notesLogic';
 
 export type EditorViewMode = 'edit' | 'split' | 'preview';
@@ -51,10 +52,61 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
   onCreateNote,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const previewScrollRef = useRef<HTMLDivElement | null>(null);
+  const activeScrollSourceRef = useRef<'editor' | 'preview' | null>(null);
+  const scrollReleaseTimerRef = useRef<number | null>(null);
   const [selectionLength, setSelectionLength] = useState(0);
   const [autocompleteCtx, setAutocompleteCtx] =
     useState<ActiveAutocompleteContext | null>(null);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
+
+  const releaseScrollLockLater = () => {
+    if (scrollReleaseTimerRef.current !== null) {
+      window.clearTimeout(scrollReleaseTimerRef.current);
+    }
+    scrollReleaseTimerRef.current = window.setTimeout(() => {
+      activeScrollSourceRef.current = null;
+      scrollReleaseTimerRef.current = null;
+    }, 60);
+  };
+
+  const handleEditorScroll = () => {
+    if (viewMode !== 'split') return;
+    if (activeScrollSourceRef.current === 'preview') return;
+
+    const editorEl = textareaRef.current;
+    const previewEl = previewScrollRef.current;
+    if (!editorEl || !previewEl) return;
+
+    activeScrollSourceRef.current = 'editor';
+    previewEl.scrollTop = computeSyncedScrollTop(
+      editorEl.scrollTop,
+      editorEl.scrollHeight,
+      editorEl.clientHeight,
+      previewEl.scrollHeight,
+      previewEl.clientHeight
+    );
+    releaseScrollLockLater();
+  };
+
+  const handlePreviewScroll = () => {
+    if (viewMode !== 'split') return;
+    if (activeScrollSourceRef.current === 'editor') return;
+
+    const editorEl = textareaRef.current;
+    const previewEl = previewScrollRef.current;
+    if (!editorEl || !previewEl) return;
+
+    activeScrollSourceRef.current = 'preview';
+    editorEl.scrollTop = computeSyncedScrollTop(
+      previewEl.scrollTop,
+      previewEl.scrollHeight,
+      previewEl.clientHeight,
+      editorEl.scrollHeight,
+      editorEl.clientHeight
+    );
+    releaseScrollLockLater();
+  };
 
   if (!note) {
     return (
@@ -527,6 +579,7 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
               ref={textareaRef}
               spellCheck={false}
               value={note.content}
+              onScroll={handleEditorScroll}
               onSelect={handleTextareaSelect}
               onKeyDown={handleEditorKeyDown}
               onChange={handleTextareaChange}
@@ -539,6 +592,10 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
 
         {(viewMode === 'preview' || viewMode === 'split') && (
           <div
+            ref={previewScrollRef}
+            onScroll={handlePreviewScroll}
+            aria-label="Note Markdown preview container"
+            data-testid="markdown-preview-scroll-container"
             className={`h-full overflow-y-auto p-12 bg-[var(--surface)] ${
               viewMode === 'split' ? 'lg:col-span-6' : 'lg:col-span-12'
             }`}

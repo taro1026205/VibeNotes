@@ -1,4 +1,4 @@
-# Quyết định Kiến trúc & Lựa chọn Công nghệ (DECISIONS.md)
+# Quyết định Kiến trúc & Lựa chọn Công nghệ 
 
 Tài liệu này trình bày ngắn gọn các quyết định lựa chọn công nghệ, kiến trúc dữ liệu và giải pháp UX/UI cho dự án **VibeNotes — Markdown & Google Keep Workspace**.
 
