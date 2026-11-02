@@ -5,6 +5,7 @@ import {
   computeNoteMetrics,
   extractPlainTextSnippet,
   createNewNoteItem,
+  applyMarkdownInsertion,
   NoteItem,
 } from './notesLogic';
 
@@ -87,4 +88,16 @@ test('createNewNoteItem generates valid default note structure', () => {
   assert.equal(note.tag, 'rose');
   assert.equal(note.pinned, false);
   assert.ok(note.id.startsWith('note-'));
+});
+
+test('applyMarkdownInsertion wraps selected text or inserts default placeholder for bold, italic, lists, and headers', () => {
+  const resBold = applyMarkdownInsertion('Hello world', 6, 11, '**', '**', 'bold');
+  assert.equal(resBold.updatedContent, 'Hello **world**');
+  assert.equal(resBold.nextSelectionStart, 8);
+  assert.equal(resBold.nextSelectionEnd, 13);
+
+  const resHeader = applyMarkdownInsertion('', 0, 0, '## ', '', 'Section Heading');
+  assert.equal(resHeader.updatedContent, '## Section Heading');
+  assert.equal(resHeader.nextSelectionStart, 3);
+  assert.equal(resHeader.nextSelectionEnd, 18);
 });

@@ -264,3 +264,41 @@ export function createNewNoteItem(partial?: Partial<NoteItem>): NoteItem {
     keepResourceName: partial?.keepResourceName,
   };
 }
+
+/**
+ * Pure helper that inserts Markdown formatting around a selection (or default text)
+ * and computes the next cursor selection range.
+ */
+export function applyMarkdownInsertion(
+  content: string,
+  selectionStart: number,
+  selectionEnd: number,
+  prefix: string,
+  suffix = '',
+  defaultText = 'text'
+): {
+  updatedContent: string;
+  nextSelectionStart: number;
+  nextSelectionEnd: number;
+} {
+  const safeStart = Math.max(0, Math.min(selectionStart, content.length));
+  const safeEnd = Math.max(safeStart, Math.min(selectionEnd, content.length));
+  const selectedText = content.slice(safeStart, safeEnd) || defaultText;
+
+  const updatedContent =
+    content.slice(0, safeStart) +
+    prefix +
+    selectedText +
+    suffix +
+    content.slice(safeEnd);
+
+  const nextSelectionStart = safeStart + prefix.length;
+  const nextSelectionEnd = nextSelectionStart + selectedText.length;
+
+  return {
+    updatedContent,
+    nextSelectionStart,
+    nextSelectionEnd,
+  };
+}
+
