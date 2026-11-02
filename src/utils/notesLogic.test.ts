@@ -12,6 +12,8 @@ import {
   deleteFilterFromList,
   moveNoteToFilter,
   computeSyncedScrollTop,
+  formatPdfFilename,
+  buildPrintableNoteHtml,
   TAG_CATEGORIES,
   NoteItem,
 } from './notesLogic';
@@ -54,7 +56,7 @@ test('filterAndSortNotes places pinned notes first, then sorts by updatedAt desc
   assert.equal(result[2].id, '1'); // Older unpinned
 });
 
-test('filterAndSortNotes filters by search query across title and content', () => {
+test('filterAndSortNotes filters by search query across title, content, and filter label', () => {
   const byContent = filterAndSortNotes(sampleNotes, 'coffee', 'all');
   assert.equal(byContent.length, 1);
   assert.equal(byContent[0].id, '2');
@@ -62,6 +64,10 @@ test('filterAndSortNotes filters by search query across title and content', () =
   const byTitle = filterAndSortNotes(sampleNotes, 'gamma', 'all');
   assert.equal(byTitle.length, 1);
   assert.equal(byTitle[0].id, '3');
+
+  const byFilterLabel = filterAndSortNotes(sampleNotes, 'personal', 'all');
+  assert.equal(byFilterLabel.length, 1);
+  assert.equal(byFilterLabel[0].id, '2');
 });
 
 test('filterAndSortNotes filters by tag category accurately', () => {
@@ -160,4 +166,18 @@ test('computeSyncedScrollTop maps scroll position proportionally in both directi
   // Non-scrollable pane returns 0 safely
   assert.equal(computeSyncedScrollTop(0, 500, 600, 1400, 600), 0);
 });
+
+test('formatPdfFilename and buildPrintableNoteHtml generate clean PDF filename and printable HTML', () => {
+  assert.equal(
+    formatPdfFilename('Q4 Product Architecture & Thiết Kế!'),
+    'q4-product-architecture-thiet-ke.pdf'
+  );
+  assert.equal(formatPdfFilename('   '), 'untitled-note.pdf');
+
+  const html = buildPrintableNoteHtml(sampleNotes[0], 'Engineering');
+  assert.ok(html.includes('Alpha Note'));
+  assert.ok(html.includes('VibeNotes · Engineering'));
+  assert.ok(html.includes('First note about frontend engineering'));
+});
+
 

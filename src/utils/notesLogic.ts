@@ -655,3 +655,55 @@ export function computeSyncedScrollTop(
   return Math.round(ratio * targetMaxScroll);
 }
 
+/**
+ * Generates a clean, safe .pdf filename from a note title.
+ */
+export function formatPdfFilename(title: string): string {
+  const base = (title || 'untitled-note')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9-_]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return `${base || 'untitled-note'}.pdf`;
+}
+
+/**
+ * Builds structured editorial HTML for PDF export of a note.
+ */
+export function buildPrintableNoteHtml(
+  note: NoteItem,
+  filterLabel: string
+): string {
+  const metrics = computeNoteMetrics(note.content);
+  const renderedBody = renderMarkdownToHtml(note.content);
+  const formattedDate = new Date(note.updatedAt).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+  const safeTitle = (note.title || 'Untitled Note')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  return `
+    <div style="font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; color: #1a1a1a; background: #ffffff; padding: 40px 48px; width: 794px; box-sizing: border-box;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid #1a1a1a; padding-bottom: 12px; margin-bottom: 24px; font-family: 'Space Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: #555555;">
+        <span>VibeNotes · ${filterLabel || 'All'}</span>
+        <span>${formattedDate} · ${metrics.words} Words · ~${metrics.readingTimeMin} Min Read</span>
+      </div>
+      <h1 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 34px; font-weight: 600; line-height: 1.2; margin: 0 0 24px 0; color: #1a1a1a;">
+        ${safeTitle}
+      </h1>
+      <div class="markdown-preview" style="font-size: 14px; line-height: 1.75; color: #1a1a1a;">
+        ${renderedBody}
+      </div>
+    </div>
+  `.trim();
+}
+
+

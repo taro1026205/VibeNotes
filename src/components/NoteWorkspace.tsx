@@ -39,6 +39,8 @@ interface NoteWorkspaceProps {
   onMoveNoteToFilter: (noteId: string, targetFilterId: TagColor) => void;
   onRequestDeleteNote: (note: NoteItem) => void;
   onCreateNote: () => void;
+  onExportPdf: () => void;
+  isExportingPdf?: boolean;
 }
 
 export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
@@ -50,6 +52,8 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
   onMoveNoteToFilter,
   onRequestDeleteNote,
   onCreateNote,
+  onExportPdf,
+  isExportingPdf = false,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const previewScrollRef = useRef<HTMLDivElement | null>(null);
@@ -320,6 +324,16 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={onExportPdf}
+            disabled={isExportingPdf}
+            aria-label="Export active note as PDF"
+            className="text-[0.6rem] font-mono uppercase tracking-wider border border-[var(--ink-faint)] hover:border-[var(--ink)] text-[var(--ink)] px-2 py-0.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
+          >
+            {isExportingPdf ? 'Exporting...' : 'Export PDF'}
+          </button>
 
           <button
             type="button"

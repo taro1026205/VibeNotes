@@ -12,7 +12,9 @@ import {
   createCustomFilter,
   deleteFilterFromList,
   moveNoteToFilter,
+  getTagMetadata,
 } from './utils/notesLogic';
+import { exportNoteToPdf } from './utils/pdfExport';
 import { initAuth, googleSignIn, logout } from './services/keepService';
 import { Sidebar } from './components/Sidebar';
 import { NoteWorkspace, EditorViewMode } from './components/NoteWorkspace';
@@ -108,8 +110,9 @@ export default function App() {
   const [selectedTag, setSelectedTag] = useState<TagColor | 'all'>('all');
   const [viewMode, setViewMode] = useState<EditorViewMode>('split');
 
-  // 5. Delete Confirmation Modal State
+  // 5. Delete Confirmation Modal & Export PDF State
   const [noteToDelete, setNoteToDelete] = useState<NoteItem | null>(null);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   // 6. Google Keep Integration & Auth State
   const [isKeepDrawerOpen, setIsKeepDrawerOpen] = useState(false);
@@ -287,6 +290,21 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportPdf = async () => {
+    if (!activeNote || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      const filterLabel = activeNote.tag
+        ? getTagMetadata(activeNote.tag, allFilters).label
+        : 'All';
+      await exportNoteToPdf(activeNote, filterLabel);
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   return (
     <div className="h-screen w-screen overflow-hidden grid grid-cols-1 md:grid-cols-[320px_1fr] grid-rows-[auto_1fr_auto] bg-[var(--bg)] text-[var(--ink)]">
       {/* Variation 2 Top Bar Contract */}
@@ -324,6 +342,16 @@ export default function App() {
             className="hover:text-[var(--ink)] transition-colors whitespace-nowrap shrink-0"
           >
             Export Markdown
+          </a>
+          <a
+            href="#export-pdf"
+            onClick={(e) => {
+              e.preventDefault();
+              handleExportPdf();
+            }}
+            className="hover:text-[var(--ink)] transition-colors whitespace-nowrap shrink-0"
+          >
+            {isExportingPdf ? 'Exporting PDF...' : 'Export PDF'}
           </a>
           <a
             href="#keep"
@@ -389,6 +417,8 @@ export default function App() {
         onMoveNoteToFilter={handleMoveNoteToFilter}
         onRequestDeleteNote={(n) => handleRequestDeleteNote(n)}
         onCreateNote={handleCreateNote}
+        onExportPdf={handleExportPdf}
+        isExportingPdf={isExportingPdf}
       />
 
       {/* Full-Width Editorial Footer */}

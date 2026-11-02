@@ -197,8 +197,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             type="search"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="SEARCH (⌘K)"
-            aria-label="Search notes by title or content"
+            placeholder="SEARCH TITLE / CONTENT / FILTER (⌘K)"
+            aria-label="Search notes by title, content, or filter"
             className="w-full p-3 pr-8 bg-transparent border border-[var(--ink)] text-xs font-mono text-[var(--ink)] placeholder:text-[var(--ink-medium)] focus:outline-none focus:ring-1 focus:ring-[var(--ink)]"
           />
           {searchQuery && (
