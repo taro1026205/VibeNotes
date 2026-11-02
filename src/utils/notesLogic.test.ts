@@ -6,6 +6,8 @@ import {
   extractPlainTextSnippet,
   createNewNoteItem,
   applyMarkdownInsertion,
+  getMarkdownAutocompleteSuggestions,
+  applyAutocompleteSuggestion,
   NoteItem,
 } from './notesLogic';
 
@@ -100,4 +102,27 @@ test('applyMarkdownInsertion wraps selected text or inserts default placeholder 
   assert.equal(resHeader.updatedContent, '## Section Heading');
   assert.equal(resHeader.nextSelectionStart, 3);
   assert.equal(resHeader.nextSelectionEnd, 18);
+});
+
+test('getMarkdownAutocompleteSuggestions and applyAutocompleteSuggestion suggest and insert headers and lists based on cursor position', () => {
+  const textWithHash = 'Intro line\n#';
+  const hashCtx = getMarkdownAutocompleteSuggestions(textWithHash, textWithHash.length);
+  assert.ok(hashCtx);
+  assert.equal(hashCtx.suggestions[0].id, 'h1');
+  assert.equal(hashCtx.suggestions[1].id, 'h2');
+
+  const appliedH2 = applyAutocompleteSuggestion(textWithHash, hashCtx, hashCtx.suggestions[1]);
+  assert.equal(appliedH2.updatedContent, 'Intro line\n## ');
+  assert.equal(appliedH2.nextCursorPosition, 14);
+
+  const textWithDash = 'Tasks:\n-';
+  const dashCtx = getMarkdownAutocompleteSuggestions(textWithDash, textWithDash.length);
+  assert.ok(dashCtx);
+  assert.ok(dashCtx.suggestions.some((s) => s.id === 'bullet'));
+  assert.ok(dashCtx.suggestions.some((s) => s.id === 'task'));
+
+  const textWithSlash = 'Write /ta';
+  const slashCtx = getMarkdownAutocompleteSuggestions(textWithSlash, textWithSlash.length);
+  assert.ok(slashCtx);
+  assert.ok(slashCtx.suggestions.some((s) => s.id === 'task' || s.id === 'table'));
 });

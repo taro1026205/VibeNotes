@@ -11,6 +11,7 @@ import {
   Code,
   Quote,
   Link2,
+  Terminal,
 } from 'lucide-react';
 import {
   NoteItem,
@@ -18,6 +19,11 @@ import {
   TAG_CATEGORIES,
   renderMarkdownToHtml,
   applyMarkdownInsertion,
+  getMarkdownAutocompleteSuggestions,
+  applyAutocompleteSuggestion,
+  ActiveAutocompleteContext,
+  MarkdownSuggestion,
+  MARKDOWN_SNIPPETS,
 } from '../utils/notesLogic';
 
 export type EditorViewMode = 'edit' | 'split' | 'preview';
@@ -41,6 +47,9 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [selectionLength, setSelectionLength] = useState(0);
+  const [autocompleteCtx, setAutocompleteCtx] =
+    useState<ActiveAutocompleteContext | null>(null);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
 
   if (!note) {
     return (
@@ -85,12 +94,60 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
     );
 
     onUpdateNote(note.id, { content: updatedContent });
+    setAutocompleteCtx(null);
 
     requestAnimationFrame(() => {
       el.focus();
       el.setSelectionRange(nextSelectionStart, nextSelectionEnd);
       setSelectionLength(nextSelectionEnd - nextSelectionStart);
     });
+  };
+
+  const handleSelectSuggestion = (suggestion: MarkdownSuggestion) => {
+    if (!autocompleteCtx) return;
+    const el = textareaRef.current;
+
+    const { updatedContent, nextCursorPosition } = applyAutocompleteSuggestion(
+      note.content,
+      autocompleteCtx,
+      suggestion
+    );
+
+    onUpdateNote(note.id, { content: updatedContent });
+    setAutocompleteCtx(null);
+    setSelectedSuggestionIndex(0);
+
+    requestAnimationFrame(() => {
+      if (el) {
+        el.focus();
+        el.setSelectionRange(nextCursorPosition, nextCursorPosition);
+      }
+    });
+  };
+
+  const triggerManualSuggestions = () => {
+    const el = textareaRef.current;
+    const cursorPos = el ? el.selectionStart : note.content.length;
+    setAutocompleteCtx({
+      triggerStart: cursorPos,
+      triggerEnd: cursorPos,
+      query: '/',
+      suggestions: MARKDOWN_SNIPPETS.slice(0, 6),
+    });
+    setSelectedSuggestionIndex(0);
+    requestAnimationFrame(() => {
+      el?.focus();
+    });
+  };
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const nextValue = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    onUpdateNote(note.id, { content: nextValue });
+
+    const nextCtx = getMarkdownAutocompleteSuggestions(nextValue, cursorPos);
+    setAutocompleteCtx(nextCtx);
+    setSelectedSuggestionIndex(0);
   };
 
   const handleTextareaSelect = () => {
@@ -100,6 +157,40 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
   };
 
   const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (autocompleteCtx && autocompleteCtx.suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedSuggestionIndex(
+          (prev) => (prev + 1) % autocompleteCtx.suggestions.length
+        );
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedSuggestionIndex(
+          (prev) =>
+            (prev - 1 + autocompleteCtx.suggestions.length) %
+            autocompleteCtx.suggestions.length
+        );
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        const chosen =
+          autocompleteCtx.suggestions[selectedSuggestionIndex] ||
+          autocompleteCtx.suggestions[0];
+        if (chosen) {
+          handleSelectSuggestion(chosen);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setAutocompleteCtx(null);
+        return;
+      }
+    }
+
     if (e.metaKey || e.ctrlKey) {
       const key = e.key.toLowerCase();
       if (key === 'b') {
@@ -108,6 +199,9 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
       } else if (key === 'i') {
         e.preventDefault();
         insertMarkdownSyntax('*', '*', 'italic text');
+      } else if (key === ' ') {
+        e.preventDefault();
+        triggerManualSuggestions();
       }
     }
   };
@@ -139,7 +233,8 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
           </span>
 
           <span className="editorial-label">
-            Markdown Studio {selectionLength > 0 ? `· ${selectionLength} chars selected` : ''}
+            Type / or #, -, &gt; for syntax suggestions
+            {selectionLength > 0 ? ` · ${selectionLength} chars selected` : ''}
           </span>
         </div>
 
@@ -209,12 +304,12 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
             }`}
           >
             {/* Floating Quick-Insert Toolbar Above Markdown Editor */}
-            <div className="px-8 pt-4 pb-2 z-10 flex items-center justify-between gap-2 shrink-0">
+            <div className="px-8 pt-4 pb-2 z-20 flex flex-col gap-2 shrink-0">
               <div
                 role="toolbar"
                 aria-label="Floating Markdown formatting toolbar"
                 data-testid="floating-markdown-toolbar"
-                className="inline-flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-[var(--surface)] border-[1.5px] border-[var(--ink)] shadow-[3px_3px_0px_var(--ink)] transition-transform"
+                className="inline-flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-[var(--surface)] border-[1.5px] border-[var(--ink)] shadow-[3px_3px_0px_var(--ink)] self-start"
               >
                 {/* Headers Group */}
                 <button
@@ -339,7 +434,81 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
                   <Link2 className="w-3.5 h-3.5" />
                   <span>Link</span>
                 </button>
+
+                <span className="h-4 w-px bg-[var(--ink-faint)] mx-1" aria-hidden="true" />
+
+                {/* Auto-Complete Palette Trigger */}
+                <button
+                  type="button"
+                  onClick={triggerManualSuggestions}
+                  aria-label="Open Markdown auto-complete suggestions"
+                  title="Open Markdown Auto-Complete (/)"
+                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider bg-[var(--ink)] text-[var(--bg)] hover:opacity-85 transition-opacity cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <Terminal className="w-3.5 h-3.5" />
+                  <span>Suggest (/)</span>
+                </button>
               </div>
+
+              {/* Contextual Auto-Completion Popover */}
+              {autocompleteCtx && autocompleteCtx.suggestions.length > 0 && (
+                <div
+                  role="listbox"
+                  aria-label="Markdown syntax suggestions"
+                  data-testid="markdown-autocomplete-menu"
+                  className="w-full max-w-md bg-[var(--surface)] border-[1.5px] border-[var(--ink)] shadow-[4px_4px_0px_var(--ink)] divide-y divide-[var(--ink-faint)]"
+                >
+                  <div className="px-3 py-1.5 bg-[var(--bg)] flex items-center justify-between">
+                    <span className="editorial-label !text-[0.58rem]">
+                      Auto-Complete ({autocompleteCtx.query})
+                    </span>
+                    <span className="editorial-label !text-[0.58rem]">
+                      ↑↓ Navigate · Tab/Enter Insert · Esc Close
+                    </span>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto">
+                    {autocompleteCtx.suggestions.map((suggestion, idx) => {
+                      const isSelected = idx === selectedSuggestionIndex;
+                      return (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          onClick={() => handleSelectSuggestion(suggestion)}
+                          className={`w-full px-3 py-2 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-[var(--ink)] text-[var(--bg)]'
+                              : 'bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--bg)]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <code
+                              className={`px-1.5 py-0.5 text-[0.65rem] font-mono border shrink-0 ${
+                                isSelected
+                                  ? 'border-[var(--bg)]/40 text-[var(--bg)]'
+                                  : 'border-[var(--ink-faint)] text-[var(--ink)] bg-[var(--bg)]'
+                              }`}
+                            >
+                              {suggestion.syntax}
+                            </code>
+                            <span className="text-xs font-semibold truncate">
+                              {suggestion.label}
+                            </span>
+                          </div>
+                          <span
+                            className={`text-[0.65rem] font-mono truncate ${
+                              isSelected ? 'text-[var(--bg)]/80' : 'text-[var(--ink-medium)]'
+                            }`}
+                          >
+                            {suggestion.description}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <textarea
@@ -348,8 +517,8 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
               value={note.content}
               onSelect={handleTextareaSelect}
               onKeyDown={handleEditorKeyDown}
-              onChange={(e) => onUpdateNote(note.id, { content: e.target.value })}
-              placeholder="Write your note in Markdown..."
+              onChange={handleTextareaChange}
+              placeholder="Write your note in Markdown... (Type / or #, -, > for auto-completion)"
               aria-label="Note Markdown content editor"
               className="w-full flex-1 px-12 pt-4 pb-12 resize-none bg-[var(--bg)] text-[var(--ink)] text-[0.9rem] leading-[1.7] font-mono focus:outline-none overflow-y-auto"
             />

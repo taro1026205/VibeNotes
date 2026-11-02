@@ -302,3 +302,213 @@ export function applyMarkdownInsertion(
   };
 }
 
+export interface MarkdownSuggestion {
+  id: string;
+  label: string;
+  syntax: string;
+  description: string;
+  insertText: string;
+  cursorBacktrack?: number;
+}
+
+export const MARKDOWN_SNIPPETS: MarkdownSuggestion[] = [
+  {
+    id: 'h1',
+    label: 'Heading 1',
+    syntax: '# ',
+    description: 'Large section title',
+    insertText: '# ',
+  },
+  {
+    id: 'h2',
+    label: 'Heading 2',
+    syntax: '## ',
+    description: 'Medium section heading',
+    insertText: '## ',
+  },
+  {
+    id: 'h3',
+    label: 'Heading 3',
+    syntax: '### ',
+    description: 'Subsection heading',
+    insertText: '### ',
+  },
+  {
+    id: 'bullet',
+    label: 'Bullet List',
+    syntax: '- ',
+    description: 'Unordered list item',
+    insertText: '- ',
+  },
+  {
+    id: 'task',
+    label: 'Task Checklist',
+    syntax: '- [ ] ',
+    description: 'Interactive to-do item',
+    insertText: '- [ ] ',
+  },
+  {
+    id: 'numbered',
+    label: 'Numbered List',
+    syntax: '1. ',
+    description: 'Ordered list item',
+    insertText: '1. ',
+  },
+  {
+    id: 'quote',
+    label: 'Blockquote',
+    syntax: '> ',
+    description: 'Editorial callout quote',
+    insertText: '> ',
+  },
+  {
+    id: 'codeblock',
+    label: 'Code Block',
+    syntax: '```ts',
+    description: 'Fenced code snippet',
+    insertText: '```typescript\n\n```',
+    cursorBacktrack: 4,
+  },
+  {
+    id: 'table',
+    label: 'Markdown Table',
+    syntax: '| Col |',
+    description: '2-column structured table',
+    insertText: '| Column 1 | Column 2 |\n| :--- | :--- |\n| Value 1 | Value 2 |',
+  },
+  {
+    id: 'divider',
+    label: 'Horizontal Divider',
+    syntax: '---',
+    description: 'Section separator rule',
+    insertText: '---\n',
+  },
+];
+
+export interface ActiveAutocompleteContext {
+  triggerStart: number;
+  triggerEnd: number;
+  query: string;
+  suggestions: MarkdownSuggestion[];
+}
+
+/**
+ * Computes contextual Markdown auto-completion suggestions based on the current
+ * line and cursor position (supports both prefix triggers like '#', '-', '>', '`'
+ * at the start of a line and slash commands like '/h1', '/list', '/task' anywhere).
+ */
+export function getMarkdownAutocompleteSuggestions(
+  content: string,
+  cursorPosition: number
+): ActiveAutocompleteContext | null {
+  const safeCursor = Math.max(0, Math.min(cursorPosition, content.length));
+  const beforeCursor = content.slice(0, safeCursor);
+  const lastNewline = beforeCursor.lastIndexOf('\n');
+  const lineStart = lastNewline + 1;
+  const currentLineBeforeCursor = beforeCursor.slice(lineStart);
+
+  // 1. Slash command trigger (e.g., "/h", "/list", "/" at start of line or after space)
+  const slashMatch = currentLineBeforeCursor.match(/(?:^|\s)(\/[a-zA-Z0-9_-]*)$/);
+  if (slashMatch) {
+    const token = slashMatch[1];
+    const query = token.slice(1).toLowerCase();
+    const triggerStart = safeCursor - token.length;
+    const matches = MARKDOWN_SNIPPETS.filter(
+      (item) =>
+        !query ||
+        item.id.includes(query) ||
+        item.label.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query)
+    );
+    if (matches.length > 0) {
+      return {
+        triggerStart,
+        triggerEnd: safeCursor,
+        query: token,
+        suggestions: matches.slice(0, 6),
+      };
+    }
+  }
+
+  // 2. Line-start Markdown prefix triggers ('#', '##', '-', '1', '>', '``')
+  const trimmedLine = currentLineBeforeCursor.trimStart();
+  const leadingSpaces = currentLineBeforeCursor.length - trimmedLine.length;
+  const tokenStart = lineStart + leadingSpaces;
+
+  if (/^#{1,3}$/.test(trimmedLine)) {
+    return {
+      triggerStart: tokenStart,
+      triggerEnd: safeCursor,
+      query: trimmedLine,
+      suggestions: MARKDOWN_SNIPPETS.filter((s) => s.id.startsWith('h')),
+    };
+  }
+
+  if (/^[-*]$/.test(trimmedLine) || /^-\s*\[?$/.test(trimmedLine)) {
+    return {
+      triggerStart: tokenStart,
+      triggerEnd: safeCursor,
+      query: trimmedLine,
+      suggestions: MARKDOWN_SNIPPETS.filter((s) =>
+        ['bullet', 'task', 'divider'].includes(s.id)
+      ),
+    };
+  }
+
+  if (/^[1-9]\.?$/.test(trimmedLine)) {
+    return {
+      triggerStart: tokenStart,
+      triggerEnd: safeCursor,
+      query: trimmedLine,
+      suggestions: MARKDOWN_SNIPPETS.filter((s) =>
+        ['numbered', 'task', 'bullet'].includes(s.id)
+      ),
+    };
+  }
+
+  if (trimmedLine === '>') {
+    return {
+      triggerStart: tokenStart,
+      triggerEnd: safeCursor,
+      query: trimmedLine,
+      suggestions: MARKDOWN_SNIPPETS.filter((s) => s.id === 'quote'),
+    };
+  }
+
+  if (/^`{1,2}$/.test(trimmedLine)) {
+    return {
+      triggerStart: tokenStart,
+      triggerEnd: safeCursor,
+      query: trimmedLine,
+      suggestions: MARKDOWN_SNIPPETS.filter((s) => s.id === 'codeblock'),
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Applies a chosen MarkdownSuggestion at the active trigger range.
+ */
+export function applyAutocompleteSuggestion(
+  content: string,
+  context: ActiveAutocompleteContext,
+  suggestion: MarkdownSuggestion
+): {
+  updatedContent: string;
+  nextCursorPosition: number;
+} {
+  const before = content.slice(0, context.triggerStart);
+  const after = content.slice(context.triggerEnd);
+  const updatedContent = before + suggestion.insertText + after;
+  const backtrack = suggestion.cursorBacktrack || 0;
+  const nextCursorPosition =
+    before.length + suggestion.insertText.length - backtrack;
+
+  return {
+    updatedContent,
+    nextCursorPosition,
+  };
+}
+
+
