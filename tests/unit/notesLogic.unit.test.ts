@@ -21,6 +21,9 @@ import {
   pushEditorHistory,
   undoEditorHistory,
   redoEditorHistory,
+  KEYBOARD_SHORTCUTS,
+  cycleEditorViewMode,
+  resolveGlobalShortcutAction,
 } from '../../src/utils/notesLogic';
 
 const mockNotes: NoteItem[] = [
@@ -187,3 +190,28 @@ test('[Unit] computeSyncedScrollTop, computeNoteMetrics, extractPlainTextSnippet
   assert.ok(html.includes('Architecture Blueprint'));
   assert.ok(html.includes('VibeNotes · Engineering'));
 });
+
+test('[Unit] KEYBOARD_SHORTCUTS, cycleEditorViewMode, and resolveGlobalShortcutAction handle shortcut mappings', () => {
+  assert.ok(KEYBOARD_SHORTCUTS.some((s) => s.id === 'new-note' && s.keys === 'Cmd/Ctrl + N'));
+  assert.ok(KEYBOARD_SHORTCUTS.some((s) => s.id === 'switch-view' && s.keys === 'Cmd/Ctrl + E'));
+  assert.ok(KEYBOARD_SHORTCUTS.some((s) => s.id === 'pin-note' && s.keys === 'Cmd/Ctrl + P'));
+
+  assert.equal(cycleEditorViewMode('edit'), 'split');
+  assert.equal(cycleEditorViewMode('split'), 'preview');
+  assert.equal(cycleEditorViewMode('preview'), 'edit');
+
+  assert.equal(resolveGlobalShortcutAction({ key: 'n', ctrlKey: true }), 'new-note');
+  assert.equal(resolveGlobalShortcutAction({ key: 'E', metaKey: true }), 'cycle-view');
+  assert.equal(resolveGlobalShortcutAction({ key: 'p', ctrlKey: true }), 'toggle-pin');
+  assert.equal(resolveGlobalShortcutAction({ key: 'k', metaKey: true }), 'focus-search');
+  assert.equal(resolveGlobalShortcutAction({ key: '/', ctrlKey: true }), 'toggle-shortcuts-modal');
+  assert.equal(
+    resolveGlobalShortcutAction({ key: '?', isEditableTarget: false }),
+    'toggle-shortcuts-modal'
+  );
+  assert.equal(
+    resolveGlobalShortcutAction({ key: '?', isEditableTarget: true }),
+    null
+  );
+});
+

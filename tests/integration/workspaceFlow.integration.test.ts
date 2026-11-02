@@ -17,6 +17,9 @@ import {
   computeNoteMetrics,
   buildPrintableNoteHtml,
   formatPdfFilename,
+  KEYBOARD_SHORTCUTS,
+  cycleEditorViewMode,
+  resolveGlobalShortcutAction,
 } from '../../src/utils/notesLogic';
 
 test('[Integration Flow 1] Note Authoring -> Toolbar Formatting -> Auto-Complete -> Undo/Redo -> PDF Export HTML', () => {
@@ -128,3 +131,54 @@ test('[Integration Flow 2] Custom Filter Creation -> Note Movement -> Multi-Fiel
   assert.equal(filters.some((f) => f.id === customFilterId), false);
   assert.equal(notes[0].tag, 'indigo');
 });
+
+test('[Integration Flow 3] Global Keyboard Shortcuts Workflow (Cmd/Ctrl+N -> Cmd/Ctrl+E -> Cmd/Ctrl+P -> Cheat-Sheet Modal)', () => {
+  let notes = [
+    createNewNoteItem({
+      id: 'existing-1',
+      title: 'Older Note',
+      pinned: false,
+      updatedAt: '2026-10-01T10:00:00.000Z',
+    }),
+  ];
+  let viewMode: 'edit' | 'split' | 'preview' = 'split';
+  let isShortcutsModalOpen = false;
+
+  // Step 1: User presses Cmd/Ctrl + N to create a new note
+  const actionNew = resolveGlobalShortcutAction({ key: 'n', ctrlKey: true });
+  assert.equal(actionNew, 'new-note');
+  const createdNote = createNewNoteItem({
+    id: 'shortcut-note-2',
+    title: 'Shortcut Created Note',
+    pinned: false,
+    updatedAt: '2026-10-02T10:00:00.000Z',
+  });
+  notes = [createdNote, ...notes];
+  assert.equal(notes.length, 2);
+
+  // Step 2: User presses Cmd/Ctrl + E twice to cycle view mode (split -> preview -> edit)
+  const actionView = resolveGlobalShortcutAction({ key: 'e', metaKey: true });
+  assert.equal(actionView, 'cycle-view');
+  viewMode = cycleEditorViewMode(viewMode);
+  assert.equal(viewMode, 'preview');
+  viewMode = cycleEditorViewMode(viewMode);
+  assert.equal(viewMode, 'edit');
+
+  // Step 3: User presses Cmd/Ctrl + P to pin 'existing-1' and verifies it sorts to the top
+  const actionPin = resolveGlobalShortcutAction({ key: 'p', ctrlKey: true });
+  assert.equal(actionPin, 'toggle-pin');
+  notes = notes.map((n) =>
+    n.id === 'existing-1' ? { ...n, pinned: !n.pinned } : n
+  );
+  const sorted = filterAndSortNotes(notes, '', 'all', TAG_CATEGORIES);
+  assert.equal(sorted[0].id, 'existing-1');
+  assert.equal(sorted[0].pinned, true);
+
+  // Step 4: User presses Cmd/Ctrl + / to open the Keyboard Shortcuts Cheat-Sheet Modal
+  const actionModal = resolveGlobalShortcutAction({ key: '/', metaKey: true });
+  assert.equal(actionModal, 'toggle-shortcuts-modal');
+  isShortcutsModalOpen = !isShortcutsModalOpen;
+  assert.equal(isShortcutsModalOpen, true);
+  assert.equal(KEYBOARD_SHORTCUTS.length, 10);
+});
+

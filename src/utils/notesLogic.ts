@@ -799,5 +799,150 @@ export function redoEditorHistory(state: EditorHistoryState): {
   };
 }
 
+export type ShortcutCategory = 'workspace' | 'editor';
+
+export interface ShortcutInfoItem {
+  id: string;
+  category: ShortcutCategory;
+  label: string;
+  description: string;
+  keys: string;
+  macKeys: string;
+}
+
+export const KEYBOARD_SHORTCUTS: ShortcutInfoItem[] = [
+  {
+    id: 'new-note',
+    category: 'workspace',
+    label: 'Create a new note',
+    description: 'Creates a fresh Markdown note in the current filter and focuses it',
+    keys: 'Cmd/Ctrl + N',
+    macKeys: '⌘ + N',
+  },
+  {
+    id: 'switch-view',
+    category: 'workspace',
+    label: 'Switch editor view',
+    description: 'Cycles through Edit → Split → Preview modes',
+    keys: 'Cmd/Ctrl + E',
+    macKeys: '⌘ + E',
+  },
+  {
+    id: 'pin-note',
+    category: 'workspace',
+    label: 'Pin or unpin active note',
+    description: 'Pins the current note to the top of the sidebar list',
+    keys: 'Cmd/Ctrl + P',
+    macKeys: '⌘ + P',
+  },
+  {
+    id: 'focus-search',
+    category: 'workspace',
+    label: 'Search notes',
+    description: 'Focuses the Title / Content / Filter search bar',
+    keys: 'Cmd/Ctrl + K',
+    macKeys: '⌘ + K',
+  },
+  {
+    id: 'open-shortcuts',
+    category: 'workspace',
+    label: 'Keyboard shortcuts cheat-sheet',
+    description: 'Opens or closes this keyboard shortcuts info modal',
+    keys: 'Cmd/Ctrl + /',
+    macKeys: '⌘ + /',
+  },
+  {
+    id: 'undo',
+    category: 'editor',
+    label: 'Undo change',
+    description: 'Steps backward in the note editor history stack',
+    keys: 'Cmd/Ctrl + Z',
+    macKeys: '⌘ + Z',
+  },
+  {
+    id: 'redo',
+    category: 'editor',
+    label: 'Redo change',
+    description: 'Steps forward in the note editor history stack',
+    keys: 'Cmd/Ctrl + Y',
+    macKeys: '⌘ + Shift + Z',
+  },
+  {
+    id: 'bold',
+    category: 'editor',
+    label: 'Bold text',
+    description: 'Wraps selected text with **bold** Markdown syntax',
+    keys: 'Cmd/Ctrl + B',
+    macKeys: '⌘ + B',
+  },
+  {
+    id: 'italic',
+    category: 'editor',
+    label: 'Italic text',
+    description: 'Wraps selected text with *italic* Markdown syntax',
+    keys: 'Cmd/Ctrl + I',
+    macKeys: '⌘ + I',
+  },
+  {
+    id: 'autocomplete',
+    category: 'editor',
+    label: 'Markdown syntax auto-complete',
+    description: 'Opens contextual Markdown command palette at the cursor',
+    keys: 'Cmd/Ctrl + Space or /',
+    macKeys: '⌘ + Space or /',
+  },
+];
+
+/**
+ * Cycles the editor view mode in order: edit -> split -> preview -> edit
+ */
+export function cycleEditorViewMode(
+  currentMode: 'edit' | 'split' | 'preview'
+): 'edit' | 'split' | 'preview' {
+  if (currentMode === 'edit') return 'split';
+  if (currentMode === 'split') return 'preview';
+  return 'edit';
+}
+
+export type GlobalShortcutAction =
+  | 'new-note'
+  | 'cycle-view'
+  | 'toggle-pin'
+  | 'focus-search'
+  | 'toggle-shortcuts-modal'
+  | null;
+
+/**
+ * Pure resolver that maps a KeyboardEvent-like payload to a global workspace action.
+ */
+export function resolveGlobalShortcutAction(event: {
+  key: string;
+  metaKey?: boolean;
+  ctrlKey?: boolean;
+  shiftKey?: boolean;
+  altKey?: boolean;
+  isEditableTarget?: boolean;
+}): GlobalShortcutAction {
+  if (event.altKey) return null;
+
+  const hasCmdOrCtrl = Boolean(event.metaKey || event.ctrlKey);
+  const normalizedKey = (event.key || '').toLowerCase();
+
+  if (hasCmdOrCtrl && !event.shiftKey) {
+    if (normalizedKey === 'n') return 'new-note';
+    if (normalizedKey === 'e') return 'cycle-view';
+    if (normalizedKey === 'p') return 'toggle-pin';
+    if (normalizedKey === 'k') return 'focus-search';
+    if (event.key === '/' || event.key === '?') return 'toggle-shortcuts-modal';
+  }
+
+  if (!hasCmdOrCtrl && !event.isEditableTarget && event.key === '?') {
+    return 'toggle-shortcuts-modal';
+  }
+
+  return null;
+}
+
+
 
 

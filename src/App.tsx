@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { User } from 'firebase/auth';
+import { PanelLeft, Sun, Moon, Info } from 'lucide-react';
 import {
   INITIAL_NOTES,
   TAG_CATEGORIES,
@@ -13,6 +14,8 @@ import {
   deleteFilterFromList,
   moveNoteToFilter,
   getTagMetadata,
+  cycleEditorViewMode,
+  resolveGlobalShortcutAction,
 } from './utils/notesLogic';
 import { exportNoteToPdf } from './utils/pdfExport';
 import { initAuth, googleSignIn, logout } from './services/keepService';
@@ -20,6 +23,7 @@ import { Sidebar } from './components/Sidebar';
 import { NoteWorkspace, EditorViewMode } from './components/NoteWorkspace';
 import { GoogleKeepDrawer } from './components/GoogleKeepDrawer';
 import { ConfirmDialog } from './components/ConfirmDialog';
+import { ShortcutsModal } from './components/ShortcutsModal';
 
 const STORAGE_KEY = 'vibenotes_workspace_notes_v1';
 const FILTERS_STORAGE_KEY = 'vibenotes_custom_filters_v1';
@@ -102,16 +106,31 @@ export default function App() {
     }
   }, [allFilters]);
 
-  // 4. Active Note, Search, Filter & View Mode State
+  // 4. Active Note, Search, Filter, View Mode & Responsive Sidebar Drawer State
   const [activeNoteId, setActiveNoteId] = useState<string | null>(() =>
     notes.length > 0 ? notes[0].id : null
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<TagColor | 'all'>('all');
   const [viewMode, setViewMode] = useState<EditorViewMode>('split');
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+  );
 
-  // 5. Delete Confirmation Modal & Export PDF State
+  // Automatically adapt sidebar drawer when crossing the 1024px breakpoint (e.g. rotating tablet or resizing)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const handleChange = (e: MediaQueryListEvent) => {
+      setIsSidebarOpen(e.matches);
+    };
+    mq.addEventListener('change', handleChange);
+    return () => mq.removeEventListener('change', handleChange);
+  }, []);
+
+  // 5. Delete Confirmation Modal, Shortcuts Info Modal & Export PDF State
   const [noteToDelete, setNoteToDelete] = useState<NoteItem | null>(null);
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   // 6. Google Keep Integration & Auth State
@@ -134,18 +153,6 @@ export default function App() {
       }
     );
     return () => unsubscribe();
-  }, []);
-
-  // Keyboard shortcut Cmd/Ctrl + K to focus search
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const filteredNotes = useMemo(
@@ -202,6 +209,16 @@ export default function App() {
     if (viewMode === 'preview') {
       setViewMode('split');
     }
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setIsSidebarOpen(false);
+    }
+  };
+
+  const handleSelectNote = (id: string) => {
+    setActiveNoteId(id);
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setIsSidebarOpen(false);
+    }
   };
 
   const handleUpdateNote = (id: string, changes: Partial<NoteItem>) => {
@@ -213,12 +230,57 @@ export default function App() {
     );
   };
 
-  const handleTogglePin = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleTogglePin = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     const target = notes.find((n) => n.id === id);
     if (!target) return;
     handleUpdateNote(id, { pinned: !target.pinned });
   };
+
+  // Global keyboard shortcuts: Cmd/Ctrl+N (New Note), Cmd/Ctrl+E (Switch View), Cmd/Ctrl+P (Pin Note), Cmd/Ctrl+K (Search), Cmd/Ctrl+/ or ? (Shortcuts Modal)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const targetEl = e.target as HTMLElement | null;
+      const isEditableTarget = Boolean(
+        targetEl &&
+          (targetEl.tagName === 'INPUT' ||
+            targetEl.tagName === 'TEXTAREA' ||
+            targetEl.tagName === 'SELECT' ||
+            targetEl.isContentEditable)
+      );
+
+      const action = resolveGlobalShortcutAction({
+        key: e.key,
+        metaKey: e.metaKey,
+        ctrlKey: e.ctrlKey,
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+        isEditableTarget,
+      });
+
+      if (!action) return;
+
+      e.preventDefault();
+      if (action === 'new-note') {
+        handleCreateNote();
+      } else if (action === 'cycle-view') {
+        setViewMode((prev) => cycleEditorViewMode(prev));
+      } else if (action === 'toggle-pin') {
+        if (activeNote) {
+          handleUpdateNote(activeNote.id, { pinned: !activeNote.pinned });
+        }
+      } else if (action === 'focus-search') {
+        setIsSidebarOpen(true);
+        requestAnimationFrame(() => {
+          searchInputRef.current?.focus();
+        });
+      } else if (action === 'toggle-shortcuts-modal') {
+        setIsShortcutsModalOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  });
 
   const handleRequestDeleteNote = (note: NoteItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -306,28 +368,44 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen w-screen overflow-hidden grid grid-cols-1 md:grid-cols-[320px_1fr] grid-rows-[auto_1fr_auto] bg-[var(--bg)] text-[var(--ink)]">
-      {/* Variation 2 Top Bar Contract */}
-      <header className="col-span-full flex items-center justify-between gap-8 px-8 py-5 border-b-[1.5px] border-[var(--ink)] bg-[var(--bg)] shrink-0">
-        {/* Zone 1: Brand wordmark in Cormorant Garamond */}
-        <a
-          href="#workspace"
-          onClick={(e) => e.preventDefault()}
-          className="brand text-2xl text-[var(--ink)] whitespace-nowrap shrink-0"
-        >
-          VibeNotes
-        </a>
+    <div
+      className={`h-[100dvh] w-screen overflow-hidden grid grid-rows-[auto_1fr_auto] bg-[var(--bg)] text-[var(--ink)] ${
+        isSidebarOpen ? 'grid-cols-1 lg:grid-cols-[320px_1fr]' : 'grid-cols-1'
+      }`}
+    >
+      {/* Variation 2 Top Bar Contract — Responsive on Mobile, Tablet & Desktop */}
+      <header className="col-span-full flex items-center justify-between gap-3 sm:gap-6 px-4 sm:px-8 py-3.5 sm:py-4 border-b-[1.5px] border-[var(--ink)] bg-[var(--bg)] shrink-0 z-20">
+        {/* Zone 1: Sidebar Toggle + Brand wordmark in Cormorant Garamond */}
+        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen((prev) => !prev)}
+            aria-label="Toggle sidebar navigation"
+            title={isSidebarOpen ? 'Collapse notes sidebar' : 'Expand notes sidebar'}
+            className="p-1.5 border border-[var(--ink-faint)] hover:border-[var(--ink)] text-[var(--ink)] transition-colors cursor-pointer"
+          >
+            <PanelLeft className="w-4 h-4" />
+          </button>
+          <a
+            href="#workspace"
+            onClick={(e) => e.preventDefault()}
+            className="brand text-xl sm:text-2xl text-[var(--ink)] whitespace-nowrap shrink-0"
+          >
+            VibeNotes
+          </a>
+        </div>
 
-        {/* Zone 2: Editorial uppercase navigation links */}
+        {/* Zone 2: Editorial uppercase navigation links (Tablet & Desktop) */}
         <nav
           aria-label="Workspace navigation"
-          className="hidden md:flex items-center gap-8 text-xs font-medium uppercase tracking-[0.05em] text-[var(--ink-medium)]"
+          className="hidden md:flex items-center gap-5 lg:gap-8 text-xs font-medium uppercase tracking-[0.05em] text-[var(--ink-medium)]"
         >
           <a
             href="#all-notes"
             onClick={(e) => {
               e.preventDefault();
               setSelectedTag('all');
+              setIsSidebarOpen(true);
             }}
             className="hover:text-[var(--ink)] transition-colors whitespace-nowrap shrink-0"
           >
@@ -375,19 +453,37 @@ export default function App() {
           </a>
         </nav>
 
-        {/* Zone 3: Primary CTA button */}
-        <div className="flex items-center gap-3 shrink-0">
+        {/* Zone 3: Quick Actions (Info/Shortcuts, Theme) + Primary Google Keep CTA */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsShortcutsModalOpen(true)}
+            aria-label="Open keyboard shortcuts cheat-sheet"
+            title="Keyboard Shortcuts Cheat-Sheet (Cmd/Ctrl + /)"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-[var(--ink-faint)] hover:border-[var(--ink)] text-[0.65rem] font-mono uppercase tracking-wider text-[var(--ink)] transition-colors cursor-pointer shrink-0"
+          >
+            <Info className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Shortcuts</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsDark((prev) => !prev)}
+            aria-label={isDark ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
+            className="md:hidden p-1.5 border border-[var(--ink-faint)] hover:border-[var(--ink)] text-[var(--ink)] cursor-pointer"
+          >
+            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
           <button
             type="button"
             onClick={() => setIsKeepDrawerOpen(true)}
-            className="btn-editorial-primary whitespace-nowrap shrink-0"
+            className="btn-editorial-primary whitespace-nowrap shrink-0 !px-2.5 sm:!px-4 !py-1.5 sm:!py-2 !text-[0.62rem] sm:!text-[0.68rem]"
           >
             {!needsAuth && user ? 'Keep Connected' : 'Connect Google Keep'}
           </button>
         </div>
       </header>
 
-      {/* Left Pane: Sidebar */}
+      {/* Left Pane: Sidebar (Slide-over drawer on mobile/tablet, collapsible column on desktop) */}
       <Sidebar
         notes={filteredNotes}
         allNotesCount={notes.length}
@@ -395,12 +491,14 @@ export default function App() {
         activeNoteId={activeNoteId}
         searchQuery={searchQuery}
         selectedTag={selectedTag}
+        isOpen={isSidebarOpen}
+        onCloseMobile={() => setIsSidebarOpen(false)}
         onSearchChange={setSearchQuery}
         onSelectTag={setSelectedTag}
         onCreateFilter={handleCreateFilter}
         onDeleteCustomFilter={handleDeleteCustomFilter}
         onMoveNoteToFilter={handleMoveNoteToFilter}
-        onSelectNote={setActiveNoteId}
+        onSelectNote={handleSelectNote}
         onCreateNote={handleCreateNote}
         onTogglePin={handleTogglePin}
         onRequestDeleteNote={handleRequestDeleteNote}
@@ -412,6 +510,8 @@ export default function App() {
         note={activeNote}
         allFilters={allFilters}
         viewMode={viewMode}
+        isSidebarOpen={isSidebarOpen}
+        onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
         onViewModeChange={setViewMode}
         onUpdateNote={handleUpdateNote}
         onMoveNoteToFilter={handleMoveNoteToFilter}
@@ -422,11 +522,11 @@ export default function App() {
       />
 
       {/* Full-Width Editorial Footer */}
-      <footer className="col-span-full px-8 py-3 border-t-[1.5px] border-[var(--ink)] bg-[var(--bg)] flex flex-wrap items-center justify-between gap-4 shrink-0">
-        <div className="editorial-label">
+      <footer className="col-span-full px-4 sm:px-8 py-2.5 sm:py-3 border-t-[1.5px] border-[var(--ink)] bg-[var(--bg)] flex flex-wrap items-center justify-between gap-2 sm:gap-4 shrink-0">
+        <div className="editorial-label !text-[0.58rem] sm:!text-[0.65rem]">
           {metrics.words} Words · {metrics.characters} Chars · {metrics.lines} Lines · ~{metrics.readingTimeMin} Min Read
         </div>
-        <div className="editorial-label">
+        <div className="editorial-label !text-[0.58rem] sm:!text-[0.65rem]">
           Saved · Updated{' '}
           {activeNote
             ? new Date(activeNote.updatedAt).toLocaleTimeString([], {
@@ -464,6 +564,12 @@ export default function App() {
         variant="danger"
         onCancel={() => setNoteToDelete(null)}
         onConfirm={handleConfirmDeleteNote}
+      />
+
+      {/* Keyboard Shortcuts Cheat-Sheet Info Modal */}
+      <ShortcutsModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
       />
     </div>
   );

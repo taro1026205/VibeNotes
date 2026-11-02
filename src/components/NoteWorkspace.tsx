@@ -14,6 +14,10 @@ import {
   Terminal,
   Undo2,
   Redo2,
+  PanelLeft,
+  PenLine,
+  Columns2,
+  Eye,
 } from 'lucide-react';
 import {
   NoteItem,
@@ -40,6 +44,8 @@ interface NoteWorkspaceProps {
   note: NoteItem | null;
   allFilters: NoteTag[];
   viewMode: EditorViewMode;
+  isSidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
   onViewModeChange: (mode: EditorViewMode) => void;
   onUpdateNote: (id: string, changes: Partial<NoteItem>) => void;
   onMoveNoteToFilter: (noteId: string, targetFilterId: TagColor) => void;
@@ -53,6 +59,8 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
   note,
   allFilters,
   viewMode,
+  isSidebarOpen = true,
+  onToggleSidebar,
   onViewModeChange,
   onUpdateNote,
   onMoveNoteToFilter,
@@ -65,6 +73,8 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
   const previewScrollRef = useRef<HTMLDivElement | null>(null);
   const activeScrollSourceRef = useRef<'editor' | 'preview' | null>(null);
   const scrollReleaseTimerRef = useRef<number | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
+
   const [selectionLength, setSelectionLength] = useState(0);
   const [autocompleteCtx, setAutocompleteCtx] =
     useState<ActiveAutocompleteContext | null>(null);
@@ -92,13 +102,18 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
     if (!editorEl || !previewEl) return;
 
     activeScrollSourceRef.current = 'editor';
-    previewEl.scrollTop = computeSyncedScrollTop(
+    const nextScrollTop = computeSyncedScrollTop(
       editorEl.scrollTop,
       editorEl.scrollHeight,
       editorEl.clientHeight,
       previewEl.scrollHeight,
       previewEl.clientHeight
     );
+
+    if (scrollRafRef.current !== null) {
+      cancelAnimationFrame(scrollRafRef.current);
+    }
+    previewEl.scrollTop = nextScrollTop;
     releaseScrollLockLater();
   };
 
@@ -111,19 +126,24 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
     if (!editorEl || !previewEl) return;
 
     activeScrollSourceRef.current = 'preview';
-    editorEl.scrollTop = computeSyncedScrollTop(
+    const nextScrollTop = computeSyncedScrollTop(
       previewEl.scrollTop,
       previewEl.scrollHeight,
       previewEl.clientHeight,
       editorEl.scrollHeight,
       editorEl.clientHeight
     );
+
+    if (scrollRafRef.current !== null) {
+      cancelAnimationFrame(scrollRafRef.current);
+    }
+    editorEl.scrollTop = nextScrollTop;
     releaseScrollLockLater();
   };
 
   if (!note) {
     return (
-      <main className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[var(--surface)]">
+      <main className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 text-center bg-[var(--surface)]">
         <div className="max-w-sm space-y-4">
           <h2 className="text-3xl font-semibold text-[var(--ink)] font-display">
             No Note Selected
@@ -131,13 +151,24 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
           <p className="text-sm text-[var(--ink-medium)] leading-relaxed">
             Choose a note from the index or create a new Markdown document to begin writing.
           </p>
-          <button
-            type="button"
-            onClick={onCreateNote}
-            className="btn-editorial-primary"
-          >
-            + New Note
-          </button>
+          <div className="flex items-center justify-center gap-3">
+            {onToggleSidebar && (
+              <button
+                type="button"
+                onClick={onToggleSidebar}
+                className="px-3 py-2 border border-[var(--ink)] text-xs font-mono uppercase tracking-wider text-[var(--ink)] cursor-pointer"
+              >
+                Open Notes List
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onCreateNote}
+              className="btn-editorial-primary"
+            >
+              + New Note
+            </button>
+          </div>
         </div>
       </main>
     );
@@ -365,11 +396,35 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
     }
   };
 
+  const modeConfig: { id: EditorViewMode; label: string; icon: React.ReactNode }[] = [
+    { id: 'edit', label: 'edit', icon: <PenLine className="w-3 h-3" /> },
+    { id: 'split', label: 'split', icon: <Columns2 className="w-3 h-3" /> },
+    { id: 'preview', label: 'preview', icon: <Eye className="w-3 h-3" /> },
+  ];
+
   return (
-    <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-[var(--surface)]">
-      {/* Top Workspace Filter & View Mode Bar */}
-      <div className="px-8 py-3 border-b border-[var(--ink-faint)] flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3 flex-wrap">
+    <main className="flex-1 flex flex-col min-w-0 min-h-0 h-full overflow-hidden bg-[var(--surface)]">
+      {/* Top Workspace Control Bar (Notion-style breadcrumb + Segmented View Modes + Actions) */}
+      <div className="px-4 sm:px-8 py-2.5 sm:py-3 border-b border-[var(--ink-faint)] flex flex-wrap items-center justify-between gap-2 sm:gap-4 shrink-0 bg-[var(--bg)]/50">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          {/* Notion-style Sidebar Drawer Toggle Button */}
+          {onToggleSidebar && (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              aria-label="Toggle notes sidebar"
+              title={isSidebarOpen ? 'Hide sidebar' : 'Show notes sidebar'}
+              className={`inline-flex items-center gap-1.5 px-2 py-1 border text-[0.6rem] font-mono uppercase tracking-wider transition-colors cursor-pointer shrink-0 ${
+                !isSidebarOpen
+                  ? 'border-[var(--ink)] bg-[var(--ink)] text-[var(--bg)]'
+                  : 'border-[var(--ink-faint)] text-[var(--ink)] hover:border-[var(--ink)] lg:hidden'
+              }`}
+            >
+              <PanelLeft className="w-3.5 h-3.5" />
+              <span>Notes</span>
+            </button>
+          )}
+
           <div className="inline-flex items-center">
             <label htmlFor="note-category-select" className="sr-only">
               Select filter
@@ -394,31 +449,36 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
             </select>
           </div>
 
-          <span className="editorial-label opacity-25" aria-hidden="true">
+          <span className="hidden xl:inline editorial-label opacity-25" aria-hidden="true">
             |
           </span>
 
-          <span className="editorial-label">
+          <span className="hidden xl:inline editorial-label truncate">
             Type / or #, -, &gt; for syntax suggestions
             {selectionLength > 0 ? ` · ${selectionLength} chars selected` : ''}
           </span>
         </div>
 
-        {/* Right Side: View Mode Controls + Pin + Delete */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1" role="group" aria-label="Editor view mode">
-            {(['edit', 'split', 'preview'] as EditorViewMode[]).map((mode) => (
+        {/* Right Side: Tactile Segmented View Mode Switcher + Export PDF + Pin + Delete */}
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+          <div
+            className="inline-flex items-center p-0.5 bg-[var(--bg)] border border-[var(--ink-faint)]"
+            role="group"
+            aria-label="Editor view mode"
+          >
+            {modeConfig.map((m) => (
               <button
-                key={mode}
+                key={m.id}
                 type="button"
-                onClick={() => onViewModeChange(mode)}
-                className={`text-[0.6rem] font-mono uppercase tracking-wider border px-2 py-0.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                  viewMode === mode
-                    ? 'bg-[var(--ink-faint)] border-[var(--ink)] text-[var(--ink)] font-bold'
-                    : 'border-[var(--ink-faint)] text-[var(--ink-medium)] hover:text-[var(--ink)]'
+                onClick={() => onViewModeChange(m.id)}
+                className={`inline-flex items-center gap-1 text-[0.6rem] font-mono uppercase tracking-wider px-2 sm:px-2.5 py-1 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  viewMode === m.id
+                    ? 'bg-[var(--ink)] text-[var(--bg)] font-bold shadow-xs'
+                    : 'text-[var(--ink-medium)] hover:text-[var(--ink)]'
                 }`}
               >
-                {mode}
+                {m.icon}
+                <span>{m.label}</span>
               </button>
             ))}
           </div>
@@ -428,7 +488,7 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
             onClick={onExportPdf}
             disabled={isExportingPdf}
             aria-label="Export active note as PDF"
-            className="text-[0.6rem] font-mono uppercase tracking-wider border border-[var(--ink-faint)] hover:border-[var(--ink)] text-[var(--ink)] px-2 py-0.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
+            className="text-[0.6rem] font-mono uppercase tracking-wider border border-[var(--ink-faint)] hover:border-[var(--ink)] text-[var(--ink)] px-2 py-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
           >
             {isExportingPdf ? 'Exporting...' : 'Export PDF'}
           </button>
@@ -437,7 +497,7 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
             type="button"
             onClick={() => onUpdateNote(note.id, { pinned: !note.pinned })}
             aria-label={note.pinned ? 'Unpin active note' : 'Pin active note'}
-            className={`text-[0.6rem] font-mono uppercase tracking-wider border px-2 py-0.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`text-[0.6rem] font-mono uppercase tracking-wider border px-2 py-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               note.pinned
                 ? 'bg-[var(--ink)] text-[var(--bg)] border-[var(--ink)]'
                 : 'border-[var(--ink-faint)] text-[var(--ink)] hover:border-[var(--ink)]'
@@ -450,206 +510,216 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
             type="button"
             onClick={() => onRequestDeleteNote(note)}
             aria-label="Delete active note"
-            className="text-[0.6rem] font-mono uppercase tracking-wider border border-[#ff4444] text-[#ff4444] hover:bg-[#ff4444] hover:text-white px-2 py-0.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            className="text-[0.6rem] font-mono uppercase tracking-wider border border-[#ff4444] text-[#ff4444] hover:bg-[#ff4444] hover:text-white px-2 py-1 transition-colors cursor-pointer whitespace-nowrap shrink-0"
           >
             Delete
           </button>
         </div>
       </div>
 
-      {/* Editorial Display Title */}
-      <div className="px-12 pt-7 pb-4 border-b border-[var(--ink-faint)]">
+      {/* Editorial Display Title (Responsive Padding & Typography on Mobile/Tablet/Desktop) */}
+      <div className="px-4 sm:px-8 lg:px-12 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b border-[var(--ink-faint)] shrink-0">
         <input
           type="text"
           value={note.title}
           onChange={(e) => onUpdateNote(note.id, { title: e.target.value })}
           placeholder="Note Title..."
           aria-label="Note title"
-          className="w-full text-3xl sm:text-[2.75rem] leading-tight font-semibold tracking-tight bg-transparent text-[var(--ink)] placeholder:text-[var(--ink-medium)]/40 focus:outline-none font-display"
+          className="w-full text-2xl sm:text-3xl lg:text-[2.6rem] leading-tight font-semibold tracking-tight bg-transparent text-[var(--ink)] placeholder:text-[var(--ink-medium)]/40 focus:outline-none font-display"
         />
       </div>
 
-      {/* Editor & Live Markdown Preview Split Container */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+      {/* Editor & Live Markdown Preview Container:
+          - Mobile (<768px) in Split Mode: 2 equal vertical rows (grid-rows-2) so both scroll smoothly
+          - Tablet & Desktop (>=768px) in Split Mode: 2 equal side-by-side columns (md:grid-cols-12) */}
+      <div
+        className={`flex-1 min-h-0 grid overflow-hidden ${
+          viewMode === 'split'
+            ? 'grid-cols-1 grid-rows-2 md:grid-rows-1 md:grid-cols-12'
+            : 'grid-cols-1 grid-rows-1 md:grid-cols-12'
+        }`}
+      >
         {(viewMode === 'edit' || viewMode === 'split') && (
           <div
-            className={`relative h-full flex flex-col overflow-hidden bg-[var(--bg)] ${
+            className={`relative h-full min-h-0 flex flex-col overflow-hidden bg-[var(--bg)] ${
               viewMode === 'split'
-                ? 'lg:col-span-6 border-b lg:border-b-0 lg:border-r border-[var(--ink-faint)]'
-                : 'lg:col-span-12'
+                ? 'md:col-span-6 border-b-[1.5px] md:border-b-0 md:border-r-[1.5px] border-[var(--ink-faint)]'
+                : 'md:col-span-12'
             }`}
           >
-            {/* Floating Quick-Insert Toolbar Above Markdown Editor */}
-            <div className="px-8 pt-4 pb-2 z-20 flex flex-col gap-2 shrink-0">
-              <div
-                role="toolbar"
-                aria-label="Floating Markdown formatting toolbar"
-                data-testid="floating-markdown-toolbar"
-                className="inline-flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-[var(--surface)] border-[1.5px] border-[var(--ink)] shadow-[3px_3px_0px_var(--ink)] self-start"
-              >
-                {/* Undo & Redo Group */}
-                <button
-                  type="button"
-                  onClick={handleUndo}
-                  disabled={!canUndo}
-                  aria-label="Undo"
-                  title="Undo (⌘Z / Ctrl+Z)"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] disabled:opacity-35 disabled:pointer-events-none transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            {/* Single-Row Horizontally Swipeable Floating Toolbar (Notion / Bear Touch Style) */}
+            <div className="px-4 sm:px-8 lg:px-12 pt-3 pb-2 z-20 flex flex-col gap-2 shrink-0">
+              <div className="w-full overflow-x-auto no-scrollbar smooth-touch-scroll pb-0.5">
+                <div
+                  role="toolbar"
+                  aria-label="Floating Markdown formatting toolbar"
+                  data-testid="floating-markdown-toolbar"
+                  className="inline-flex items-center gap-0.5 px-2 py-1.5 bg-[var(--surface)] border-[1.5px] border-[var(--ink)] shadow-[2px_2px_0px_var(--ink)] sm:shadow-[3px_3px_0px_var(--ink)] min-w-max"
                 >
-                  <Undo2 className="w-3.5 h-3.5" />
-                  <span>Undo</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRedo}
-                  disabled={!canRedo}
-                  aria-label="Redo"
-                  title="Redo (⌘⇧Z / Ctrl+Y)"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] disabled:opacity-35 disabled:pointer-events-none transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <Redo2 className="w-3.5 h-3.5" />
-                  <span>Redo</span>
-                </button>
+                  {/* Undo & Redo Group */}
+                  <button
+                    type="button"
+                    onClick={handleUndo}
+                    disabled={!canUndo}
+                    aria-label="Undo"
+                    title="Undo (⌘Z / Ctrl+Z)"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] disabled:opacity-35 disabled:pointer-events-none transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <Undo2 className="w-3.5 h-3.5" />
+                    <span>Undo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRedo}
+                    disabled={!canRedo}
+                    aria-label="Redo"
+                    title="Redo (⌘⇧Z / Ctrl+Y)"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] disabled:opacity-35 disabled:pointer-events-none transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <Redo2 className="w-3.5 h-3.5" />
+                    <span>Redo</span>
+                  </button>
 
-                <span className="h-4 w-px bg-[var(--ink-faint)] mx-1" aria-hidden="true" />
+                  <span className="h-4 w-px bg-[var(--ink-faint)] mx-1" aria-hidden="true" />
 
-                {/* Headers Group */}
-                <button
-                  type="button"
-                  onClick={() => insertMarkdownSyntax('# ', '', 'Heading 1')}
-                  aria-label="Insert Heading 1"
-                  title="Heading 1 (# )"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <Heading1 className="w-3.5 h-3.5" />
-                  <span>H1</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertMarkdownSyntax('## ', '', 'Heading 2')}
-                  aria-label="Insert Heading 2"
-                  title="Heading 2 (## )"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <Heading2 className="w-3.5 h-3.5" />
-                  <span>H2</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertMarkdownSyntax('### ', '', 'Heading 3')}
-                  aria-label="Insert Heading 3"
-                  title="Heading 3 (### )"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <Heading3 className="w-3.5 h-3.5" />
-                  <span>H3</span>
-                </button>
+                  {/* Headers Group */}
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSyntax('# ', '', 'Heading 1')}
+                    aria-label="Insert Heading 1"
+                    title="Heading 1 (# )"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <Heading1 className="w-3.5 h-3.5" />
+                    <span>H1</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSyntax('## ', '', 'Heading 2')}
+                    aria-label="Insert Heading 2"
+                    title="Heading 2 (## )"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <Heading2 className="w-3.5 h-3.5" />
+                    <span>H2</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSyntax('### ', '', 'Heading 3')}
+                    aria-label="Insert Heading 3"
+                    title="Heading 3 (### )"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <Heading3 className="w-3.5 h-3.5" />
+                    <span>H3</span>
+                  </button>
 
-                <span className="h-4 w-px bg-[var(--ink-faint)] mx-1" aria-hidden="true" />
+                  <span className="h-4 w-px bg-[var(--ink-faint)] mx-1" aria-hidden="true" />
 
-                {/* Inline Styles Group */}
-                <button
-                  type="button"
-                  onClick={() => insertMarkdownSyntax('**', '**', 'bold text')}
-                  aria-label="Insert Bold"
-                  title="Bold (⌘B)"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <Bold className="w-3.5 h-3.5" />
-                  <span>Bold</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertMarkdownSyntax('*', '*', 'italic text')}
-                  aria-label="Insert Italic"
-                  title="Italic (⌘I)"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <Italic className="w-3.5 h-3.5" />
-                  <span>Italic</span>
-                </button>
+                  {/* Inline Styles Group */}
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSyntax('**', '**', 'bold text')}
+                    aria-label="Insert Bold"
+                    title="Bold (⌘B)"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <Bold className="w-3.5 h-3.5" />
+                    <span>Bold</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSyntax('*', '*', 'italic text')}
+                    aria-label="Insert Italic"
+                    title="Italic (⌘I)"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <Italic className="w-3.5 h-3.5" />
+                    <span>Italic</span>
+                  </button>
 
-                <span className="h-4 w-px bg-[var(--ink-faint)] mx-1" aria-hidden="true" />
+                  <span className="h-4 w-px bg-[var(--ink-faint)] mx-1" aria-hidden="true" />
 
-                {/* Lists Group */}
-                <button
-                  type="button"
-                  onClick={() => insertMarkdownSyntax('\n- ', '', 'List item')}
-                  aria-label="Insert Bullet List"
-                  title="Bullet List (- )"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <List className="w-3.5 h-3.5" />
-                  <span>List</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertMarkdownSyntax('\n1. ', '', 'Numbered item')}
-                  aria-label="Insert Numbered List"
-                  title="Numbered List (1. )"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <ListOrdered className="w-3.5 h-3.5" />
-                  <span>Num</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertMarkdownSyntax('\n- [ ] ', '', 'Task item')}
-                  aria-label="Insert Checklist"
-                  title="Task Checklist (- [ ] )"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <CheckSquare className="w-3.5 h-3.5" />
-                  <span>Task</span>
-                </button>
+                  {/* Lists Group */}
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSyntax('\n- ', '', 'List item')}
+                    aria-label="Insert Bullet List"
+                    title="Bullet List (- )"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <List className="w-3.5 h-3.5" />
+                    <span>List</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSyntax('\n1. ', '', 'Numbered item')}
+                    aria-label="Insert Numbered List"
+                    title="Numbered List (1. )"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <ListOrdered className="w-3.5 h-3.5" />
+                    <span>Num</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSyntax('\n- [ ] ', '', 'Task item')}
+                    aria-label="Insert Checklist"
+                    title="Task Checklist (- [ ] )"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>Task</span>
+                  </button>
 
-                <span className="h-4 w-px bg-[var(--ink-faint)] mx-1" aria-hidden="true" />
+                  <span className="h-4 w-px bg-[var(--ink-faint)] mx-1" aria-hidden="true" />
 
-                {/* Blocks & Links Group */}
-                <button
-                  type="button"
-                  onClick={() => insertMarkdownSyntax('\n> ', '', 'Blockquote')}
-                  aria-label="Insert Blockquote"
-                  title="Blockquote (> )"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <Quote className="w-3.5 h-3.5" />
-                  <span>Quote</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertMarkdownSyntax('`', '`', 'code')}
-                  aria-label="Insert Inline Code"
-                  title="Inline Code (`code`)"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <Code className="w-3.5 h-3.5" />
-                  <span>Code</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertMarkdownSyntax('[', '](https://example.com)', 'link text')}
-                  aria-label="Insert Link"
-                  title="Markdown Link ([text](url))"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <Link2 className="w-3.5 h-3.5" />
-                  <span>Link</span>
-                </button>
+                  {/* Blocks & Links Group */}
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSyntax('\n> ', '', 'Blockquote')}
+                    aria-label="Insert Blockquote"
+                    title="Blockquote (> )"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <Quote className="w-3.5 h-3.5" />
+                    <span>Quote</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSyntax('`', '`', 'code')}
+                    aria-label="Insert Inline Code"
+                    title="Inline Code (`code`)"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <Code className="w-3.5 h-3.5" />
+                    <span>Code</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSyntax('[', '](https://example.com)', 'link text')}
+                    aria-label="Insert Link"
+                    title="Markdown Link ([text](url))"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                    <span>Link</span>
+                  </button>
 
-                <span className="h-4 w-px bg-[var(--ink-faint)] mx-1" aria-hidden="true" />
+                  <span className="h-4 w-px bg-[var(--ink-faint)] mx-1" aria-hidden="true" />
 
-                {/* Auto-Complete Palette Trigger */}
-                <button
-                  type="button"
-                  onClick={triggerManualSuggestions}
-                  aria-label="Open Markdown auto-complete suggestions"
-                  title="Open Markdown Auto-Complete (/)"
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider bg-[var(--ink)] text-[var(--bg)] hover:opacity-85 transition-opacity cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <Terminal className="w-3.5 h-3.5" />
-                  <span>Suggest (/)</span>
-                </button>
+                  {/* Auto-Complete Palette Trigger */}
+                  <button
+                    type="button"
+                    onClick={triggerManualSuggestions}
+                    aria-label="Open Markdown auto-complete suggestions"
+                    title="Open Markdown Auto-Complete (/)"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[0.65rem] font-mono font-bold uppercase tracking-wider bg-[var(--ink)] text-[var(--bg)] hover:opacity-85 transition-opacity cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <Terminal className="w-3.5 h-3.5" />
+                    <span>Suggest (/)</span>
+                  </button>
+                </div>
               </div>
 
               {/* Contextual Auto-Completion Popover */}
@@ -665,10 +735,10 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
                       Auto-Complete ({autocompleteCtx.query})
                     </span>
                     <span className="editorial-label !text-[0.58rem]">
-                      ↑↓ Navigate · Tab/Enter Insert · Esc Close
+                      ↑↓ · Enter · Esc
                     </span>
                   </div>
-                  <div className="max-h-48 overflow-y-auto">
+                  <div className="max-h-44 overflow-y-auto smooth-touch-scroll">
                     {autocompleteCtx.suggestions.map((suggestion, idx) => {
                       const isSelected = idx === selectedSuggestionIndex;
                       return (
@@ -723,7 +793,7 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
               onChange={handleTextareaChange}
               placeholder="Write your note in Markdown... (Type / or #, -, > for auto-completion)"
               aria-label="Note Markdown content editor"
-              className="w-full flex-1 px-12 pt-4 pb-12 resize-none bg-[var(--bg)] text-[var(--ink)] text-[0.9rem] leading-[1.7] font-mono focus:outline-none overflow-y-auto"
+              className="w-full flex-1 min-h-0 px-4 sm:px-8 lg:px-12 pt-2 pb-10 resize-none bg-[var(--bg)] text-[var(--ink)] text-[0.88rem] sm:text-[0.9rem] leading-[1.7] font-mono focus:outline-none overflow-y-auto smooth-touch-scroll"
             />
           </div>
         )}
@@ -734,13 +804,18 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
             onScroll={handlePreviewScroll}
             aria-label="Note Markdown preview container"
             data-testid="markdown-preview-scroll-container"
-            className={`h-full overflow-y-auto p-12 bg-[var(--surface)] ${
-              viewMode === 'split' ? 'lg:col-span-6' : 'lg:col-span-12'
+            className={`h-full min-h-0 overflow-y-auto smooth-touch-scroll px-4 sm:px-8 lg:px-12 py-6 sm:py-8 lg:py-10 bg-[var(--surface)] ${
+              viewMode === 'split' ? 'md:col-span-6' : 'md:col-span-12'
             }`}
           >
+            {viewMode === 'split' && (
+              <div className="md:hidden editorial-label !text-[0.55rem] mb-2 pb-1 border-b border-[var(--ink-faint)]">
+                Live Preview (Synced Scroll)
+              </div>
+            )}
             <div
               data-testid="markdown-preview-pane"
-              className="markdown-preview max-w-[68ch] text-[15px]"
+              className="markdown-preview max-w-[68ch] text-[14.5px] sm:text-[15px]"
               dangerouslySetInnerHTML={{ __html: renderedHtml }}
             />
           </div>
