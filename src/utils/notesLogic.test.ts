@@ -9,6 +9,7 @@ import {
   getMarkdownAutocompleteSuggestions,
   applyAutocompleteSuggestion,
   createCustomFilter,
+  deleteFilterFromList,
   moveNoteToFilter,
   TAG_CATEGORIES,
   NoteItem,
@@ -130,7 +131,7 @@ test('getMarkdownAutocompleteSuggestions and applyAutocompleteSuggestion suggest
   assert.ok(slashCtx.suggestions.some((s) => s.id === 'task' || s.id === 'table'));
 });
 
-test('createCustomFilter creates a new filter and moveNoteToFilter moves notes into it', () => {
+test('createCustomFilter, deleteFilterFromList, and moveNoteToFilter manage all filters except All', () => {
   const { updatedFilters, createdFilter, error } = createCustomFilter(
     TAG_CATEGORIES,
     'Sprint 14'
@@ -144,12 +145,8 @@ test('createCustomFilter creates a new filter and moveNoteToFilter moves notes i
   const movedTarget = movedNotes.find((n) => n.id === '1');
   assert.equal(movedTarget?.tag, createdFilter.id);
 
-  const filteredByCustom = filterAndSortNotes(
-    movedNotes,
-    '',
-    createdFilter.id,
-    updatedFilters
-  );
-  assert.equal(filteredByCustom.length, 1);
-  assert.equal(filteredByCustom[0].id, '1');
+  const { updatedFilters: afterDelete, updatedNotes: notesAfterDelete } =
+    deleteFilterFromList(updatedFilters, movedNotes, 'indigo');
+  assert.equal(afterDelete.some((f) => f.id === 'indigo'), false);
+  assert.equal(notesAfterDelete.find((n) => n.id === '3')?.tag, 'emerald');
 });

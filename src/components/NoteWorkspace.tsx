@@ -227,6 +227,11 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
               aria-label="Select note filter"
               className="editorial-label bg-transparent border border-[var(--ink-faint)] hover:border-[var(--ink)] px-2 py-1 text-[var(--ink)] focus:outline-none focus:border-[var(--ink)] cursor-pointer"
             >
+              {allFilters.length === 0 && (
+                <option value="" className="bg-[var(--surface)] text-[var(--ink)]">
+                  All
+                </option>
+              )}
               {allFilters.map((cat) => (
                 <option key={cat.id} value={cat.id} className="bg-[var(--surface)] text-[var(--ink)]">
                   {cat.label}

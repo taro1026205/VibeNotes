@@ -227,6 +227,31 @@ export function createCustomFilter(
 }
 
 /**
+ * Deletes any filter (preset or custom) and reassigns notes that belonged to it
+ * to the first remaining filter (or '' if no filters remain).
+ */
+export function deleteFilterFromList(
+  existingFilters: NoteTag[],
+  notes: NoteItem[],
+  filterIdToRemove: TagColor
+): {
+  updatedFilters: NoteTag[];
+  updatedNotes: NoteItem[];
+} {
+  const updatedFilters = existingFilters.filter((f) => f.id !== filterIdToRemove);
+  const fallbackTag = updatedFilters.length > 0 ? updatedFilters[0].id : '';
+
+  const updatedNotes = notes.map((note) =>
+    note.tag === filterIdToRemove ? { ...note, tag: fallbackTag } : note
+  );
+
+  return {
+    updatedFilters,
+    updatedNotes,
+  };
+}
+
+/**
  * Moves a note (by noteId) to a target filter (targetFilterId) and updates its timestamp.
  */
 export function moveNoteToFilter(

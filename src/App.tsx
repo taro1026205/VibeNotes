@@ -10,6 +10,7 @@ import {
   createNewNoteItem,
   computeNoteMetrics,
   createCustomFilter,
+  deleteFilterFromList,
   moveNoteToFilter,
 } from './utils/notesLogic';
 import { initAuth, googleSignIn, logout } from './services/keepService';
@@ -39,13 +40,13 @@ export default function App() {
     return INITIAL_NOTES;
   });
 
-  // 2. Filters / Categories state (default + user-created custom filters)
+  // 2. Filters / Categories state (default + user-created custom filters; all deletable except 'All')
   const [allFilters, setAllFilters] = useState<NoteTag[]>(() => {
     try {
       const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
-      if (raw) {
+      if (raw !== null) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
@@ -173,10 +174,13 @@ export default function App() {
   };
 
   const handleDeleteCustomFilter = (filterId: TagColor) => {
-    setAllFilters((prev) => prev.filter((f) => f.id !== filterId));
-    setNotes((prev) =>
-      prev.map((n) => (n.tag === filterId ? { ...n, tag: 'indigo' } : n))
+    const { updatedFilters, updatedNotes } = deleteFilterFromList(
+      allFilters,
+      notes,
+      filterId
     );
+    setAllFilters(updatedFilters);
+    setNotes(updatedNotes);
     if (selectedTag === filterId) {
       setSelectedTag('all');
     }
@@ -188,7 +192,7 @@ export default function App() {
 
   const handleCreateNote = () => {
     const newNote = createNewNoteItem({
-      tag: selectedTag === 'all' ? 'indigo' : selectedTag,
+      tag: selectedTag === 'all' ? (allFilters[0]?.id || '') : selectedTag,
     });
     setNotes((prev) => [newNote, ...prev]);
     setActiveNoteId(newNote.id);

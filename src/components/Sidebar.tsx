@@ -163,6 +163,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               title="Select filter"
               className="text-[0.55rem] font-mono uppercase tracking-wider bg-transparent border border-[var(--ink-faint)] hover:border-[var(--ink)] px-1.5 py-0.5 text-[var(--ink)] focus:outline-none cursor-pointer"
             >
+              {allFilters.length === 0 && (
+                <option value="" className="bg-[var(--surface)] text-[var(--ink)]">
+                  All
+                </option>
+              )}
               {allFilters.map((f) => (
                 <option
                   key={f.id}
@@ -322,17 +327,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 >
                   {cat.label}
                 </button>
-                {cat.isCustom && (
-                  <button
-                    type="button"
-                    onClick={() => onDeleteCustomFilter(cat.id)}
-                    aria-label={`Remove filter ${cat.label}`}
-                    title={`Delete filter ${cat.label}`}
-                    className="border border-l-0 border-[var(--ink-faint)] hover:border-[var(--ink)] hover:text-[#ff4444] px-1 py-0.5 text-[0.6rem] font-mono text-[var(--ink-medium)] transition-colors cursor-pointer"
-                  >
-                    ×
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => onDeleteCustomFilter(cat.id)}
+                  aria-label={`Remove filter ${cat.label}`}
+                  title={`Delete filter ${cat.label}`}
+                  className="border border-l-0 border-[var(--ink-faint)] hover:border-[var(--ink)] hover:text-[#ff4444] px-1 py-0.5 text-[0.6rem] font-mono text-[var(--ink-medium)] transition-colors cursor-pointer"
+                >
+                  ×
+                </button>
               </div>
             );
           })}
