@@ -240,7 +240,7 @@ Toàn bộ tài liệu kiến trúc, bảng phân rã công việc (WBS), nhật
 - **[`DECISIONS.md`](DECISIONS.md)**: Tài liệu quyết định kiến trúc & lựa chọn công nghệ (ADR).
 - **Thư mục [`/docs`](docs/)**: Đóng gói toàn bộ file ghi log và kế hoạch tiến độ dự án:
   - **[`docs/PROJECT_PLAN_WBS.md`](docs/PROJECT_PLAN_WBS.md)**: Bảng phân rã công việc (WBS), mốc thời gian 7 ngày và Định nghĩa hoàn thành (Definition of Done - DoD).
-  - **[`docs/PROJECT_PLAN_WBS.csv`](docs/PROJECT_PLAN_WBS.csv)**: File CSV chuẩn hoá để Import trực tiếp vào **Excel / Google Sheets / Notion / Trello**.
+  - **[`docs/PROJECT_PLAN_WBS.csv`](docs/PROJECT_PLAN_WBS.csv)**: File CSV tiến độ.
   - **[`docs/DAILY_LOG.md`](docs/DAILY_LOG.md)**: Nhật ký công việc hàng ngày (Daily Standup Log: hôm qua làm gì, hôm nay làm gì, vướng mắc & hướng xử lý, kèm commit message).
 - **Thư mục [`/tests`](tests/)**: Bộ kiểm thử tự động & thủ công:
   - **[`tests/unit/notesLogic.unit.test.ts`](tests/unit/notesLogic.unit.test.ts)**: 10 Unit Test Suites cho các hàm xử lý logic chính.
