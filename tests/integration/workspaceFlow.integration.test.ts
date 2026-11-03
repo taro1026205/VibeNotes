@@ -24,6 +24,11 @@ import {
   recordNoteVersionSnapshot,
   restorePreviousNoteVersion,
   getNoteVersionStack,
+  NOTE_SORT_OPTIONS,
+  sortNotesByOption,
+  validateEmailSignUpInput,
+  validateEmailLoginInput,
+  createGoogleDemoUserProfile,
 } from '../../src/utils/notesLogic';
 
 test('[Integration Flow 1] Note Authoring -> Toolbar Formatting -> Auto-Complete -> Undo/Redo -> Local Version Restore -> PDF Export HTML', () => {
@@ -115,19 +120,33 @@ test('[Integration Flow 1] Note Authoring -> Toolbar Formatting -> Auto-Complete
   assert.ok(printableHtml.includes('<strong>Local-First Storage</strong>'));
 });
 
-test('[Integration Flow 2] Custom Filter Creation -> Note Movement -> Multi-Field Search -> Filter Deletion Reassignment', () => {
-  // Step 1: Start with default filters and 2 notes
+test('[Integration Flow 2] Custom Filter Creation -> Note Movement -> Multi-Field Search -> Multi-Mode Sorting -> Filter Deletion Reassignment', () => {
+  // Step 1: Start with default filters and 3 notes with distinct titles, dates, and pinned states
   let filters = [...TAG_CATEGORIES];
   let notes = [
     createNewNoteItem({
-      title: 'Meeting Notes',
+      id: 'n-zeta',
+      title: 'Zeta Meeting Notes',
       content: 'Discuss Q4 roadmap',
       tag: 'indigo',
+      pinned: true,
+      updatedAt: '2026-10-10T10:00:00.000Z',
     }),
     createNewNoteItem({
-      title: 'Release Plan',
+      id: 'n-alpha',
+      title: 'Alpha Release Plan',
       content: 'Deploy production build',
       tag: 'rose',
+      pinned: false,
+      updatedAt: '2026-11-01T10:00:00.000Z',
+    }),
+    createNewNoteItem({
+      id: 'n-beta',
+      title: 'Beta QA Checklist',
+      content: 'Verify sidebar sorting options',
+      tag: 'emerald',
+      pinned: false,
+      updatedAt: '2026-10-20T10:00:00.000Z',
     }),
   ];
 
@@ -144,9 +163,36 @@ test('[Integration Flow 2] Custom Filter Creation -> Note Movement -> Multi-Fiel
   // Step 4: User searches by the custom filter's Vietnamese label ("Dự Án Mới")
   const searchByFilter = filterAndSortNotes(notes, 'dự án mới', 'all', filters);
   assert.equal(searchByFilter.length, 1);
-  assert.equal(searchByFilter[0].title, 'Meeting Notes');
+  assert.equal(searchByFilter[0].title, 'Zeta Meeting Notes');
 
-  // Step 5: User deletes the custom filter -> note automatically reassigns to first remaining filter ('indigo')
+  // Step 5: User switches Sidebar Sort dropdown across 'Pinned', 'Date Modified', and 'Title'
+  assert.deepEqual(
+    NOTE_SORT_OPTIONS.map((opt) => opt.label),
+    ['Date Modified', 'Title', 'Pinned']
+  );
+
+  const byPinned = filterAndSortNotes(notes, '', 'all', filters, 'pinned');
+  assert.deepEqual(
+    byPinned.map((n) => n.id),
+    ['n-zeta', 'n-alpha', 'n-beta']
+  );
+
+  const byDateModified = filterAndSortNotes(
+    notes,
+    '',
+    'all',
+    filters,
+    'dateModified'
+  );
+  assert.equal(byDateModified[0].id, 'n-zeta'); // n-zeta was just moved in Step 3 so its updatedAt is freshest
+
+  const byTitle = filterAndSortNotes(notes, '', 'all', filters, 'title');
+  assert.deepEqual(
+    byTitle.map((n) => n.title),
+    ['Alpha Release Plan', 'Beta QA Checklist', 'Zeta Meeting Notes']
+  );
+
+  // Step 6: User deletes the custom filter -> note automatically reassigns to first remaining filter ('indigo')
   const deleteRes = deleteFilterFromList(filters, notes, customFilterId);
   filters = deleteRes.updatedFilters;
   notes = deleteRes.updatedNotes;
@@ -203,4 +249,72 @@ test('[Integration Flow 3] Global Keyboard Shortcuts Workflow (Cmd/Ctrl+N -> Cmd
   assert.equal(isShortcutsModalOpen, true);
   assert.equal(KEYBOARD_SHORTCUTS.length, 10);
 });
+
+test('[Integration Flow 4] Notion-Style Auth Flow (Sign Up New User -> Sign Out -> Sign In -> Google Demo -> Sidebar Sorting)', () => {
+  // Step 1: New user registers via Sign Up tab
+  const signUpRes = validateEmailSignUpInput(
+    'Minh Tran',
+    'minh.tran@vibenotes.dev',
+    'workspace2026',
+    'workspace2026',
+    []
+  );
+  assert.equal(signUpRes.ok, true);
+  assert.equal(signUpRes.profile?.name, 'Minh Tran');
+  assert.equal(signUpRes.profile?.isNewUser, true);
+  const registeredAccounts = signUpRes.updatedAccounts;
+  assert.equal(registeredAccounts.length, 1);
+
+  // Step 2: User signs out and signs back in with the registered email and password
+  const signInRes = validateEmailLoginInput(
+    'minh.tran@vibenotes.dev',
+    'workspace2026',
+    '',
+    registeredAccounts
+  );
+  assert.equal(signInRes.ok, true);
+  assert.equal(signInRes.profile?.name, 'Minh Tran');
+  assert.equal(signInRes.profile?.provider, 'email');
+
+  // Step 3: User tests Google Demo Sign-In profile creation
+  const googleUser = createGoogleDemoUserProfile();
+  assert.equal(googleUser.provider, 'google');
+  assert.ok(googleUser.name.length > 0);
+
+  // Step 4: Inside the workspace, user sorts notes by 'dateModified', 'title', and 'pinned'
+  const workspaceNotes = [
+    createNewNoteItem({
+      id: 'w-1',
+      title: 'Charlie Architecture',
+      pinned: true,
+      updatedAt: '2026-10-05T10:00:00.000Z',
+    }),
+    createNewNoteItem({
+      id: 'w-2',
+      title: 'Alpha Design Notes',
+      pinned: false,
+      updatedAt: '2026-10-25T10:00:00.000Z',
+    }),
+    createNewNoteItem({
+      id: 'w-3',
+      title: 'Bravo Sprint Log',
+      pinned: false,
+      updatedAt: '2026-10-15T10:00:00.000Z',
+    }),
+  ];
+
+  assert.deepEqual(
+    sortNotesByOption(workspaceNotes, 'dateModified').map((n) => n.id),
+    ['w-2', 'w-3', 'w-1']
+  );
+  assert.deepEqual(
+    sortNotesByOption(workspaceNotes, 'title').map((n) => n.id),
+    ['w-2', 'w-3', 'w-1']
+  );
+  assert.deepEqual(
+    sortNotesByOption(workspaceNotes, 'pinned').map((n) => n.id),
+    ['w-1', 'w-2', 'w-3']
+  );
+});
+
 

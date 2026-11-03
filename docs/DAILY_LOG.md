@@ -37,23 +37,26 @@ Thư mục lưu trữ: **`/docs/DAILY_LOG.md`** (Đi kèm kế hoạch **[`PROJE
 
 ---
 
-## Ngày 3 — Hệ thống Filter Động, Di chuyển Ghi chú & Tìm kiếm Đa trường
+## Ngày 3 — Hệ thống Filter Động, Sắp xếp Ghi chú Đa chế độ (`Sort By`) & Tìm kiếm Đa trường
 - **Hôm qua làm gì**: Hoàn thiện CRUD ghi chú, tự động lưu `localStorage`, lịch sử phiên bản và hộp thoại xác nhận xoá.
 - **Hôm nay làm gì**:
   - Xây dựng tính năng tạo Filter mới (`+ New Filter`) và lưu danh sách Filter vào `localStorage` (`vibenotes_custom_filters_v1`).
   - Cho phép xoá bất kỳ Filter nào ngoại trừ filter gốc `All` bằng nút `×`.
   - Hỗ trợ gắn/chuyển Filter cho ghi chú qua menu chọn `<select>` gọn nhẹ trên từng thẻ ghi chú hoặc kéo-thả (`Drag & Drop`).
+  - Bổ sung thanh chọn **`Sort By`** (`data-testid="sidebar-sort-select"`) trên Sidebar cho phép sắp xếp danh sách ghi chú theo **3 chế độ**: **`Date Modified`** (`dateModified`), **`Title`** (`title` — bảng chữ cái A–Z) và **`Pinned`** (`pinned`), lưu bền vững lựa chọn vào `localStorage` (`vibenotes_sort_by_v1`).
   - Nâng cấp thanh tìm kiếm (`⌘K`) hỗ trợ tìm đồng thời theo **Tiêu đề / Nội dung / Tên Filter**.
 - **Vướng mắc & Giải pháp**:
-  - *Vướng mắc*: Khi người dùng xoá một Filter đang chứa ghi chú, các ghi chú đó có nguy cơ bị mồ côi (`tag` trỏ tới filter không còn tồn tại).
-  - *Giải pháp*: Viết hàm `deleteFilterFromList` trong `notesLogic.ts` tự động gán lại các ghi chú bị ảnh hưởng sang filter đầu tiên còn lại (hoặc về `All` nếu xoá hết filter phụ).
+  - *Vướng mắc 1*: Khi người dùng xoá một Filter đang chứa ghi chú, các ghi chú đó có nguy cơ bị mồ côi (`tag` trỏ tới filter không còn tồn tại).
+  - *Giải pháp 1*: Viết hàm `deleteFilterFromList` trong `notesLogic.ts` tự động gán lại các ghi chú bị ảnh hưởng sang filter đầu tiên còn lại (hoặc về `All` nếu xoá hết filter phụ).
+  - *Vướng mắc 2*: Khi chuyển từ chế độ sắp xếp `Pinned` sang `Date Modified` hoặc `Title`, người dùng vẫn cần nhận biết nhanh ghi chú nào đang được ghim mà không bị tách làm 2 danh sách rời rạc.
+  - *Giải pháp 2*: Ở chế độ `Pinned`, tách rõ 2 nhóm `Pinned — N` và `Notes — M`; khi chuyển sang `Date Modified` hoặc `Title`, gộp thành 1 danh sách liền mạch (`Sorted by Date Modified — N` hoặc `Sorted by Title (A–Z) — N`) và hiển thị nhãn `Pinned ·` trực tiếp trên thẻ ghi chú đã ghim.
 - **Commit tiêu biểu**:
-  - `feat(filters): add dynamic filter creation/deletion, drag-and-drop assignment, and title/content/filter search`
+  - `feat(filters-sort): add dynamic filter management, multi-field search, and Sidebar sorting by Date Modified, Title, and Pinned`
 
 ---
 
 ## Ngày 4 — Trình Soạn thảo Markdown: Floating Toolbar, Auto-complete, Undo/Redo & Bảng Phím tắt (`ShortcutsModal`)
-- **Hôm qua làm gì**: Hoàn thành hệ thống quản lý Filter động và tìm kiếm đa trường.
+- **Hôm qua làm gì**: Hoàn thành hệ thống quản lý Filter động, sắp xếp đa chế độ và tìm kiếm đa trường.
 - **Hôm nay làm gì**:
   - Tích hợp thư viện `marked` để kết xuất Markdown sang HTML.
   - Xây dựng **Floating Markdown Toolbar** phía trên khung soạn thảo (`H1`–`H3`, `Bold`, `Italic`, `List`, `Num`, `Task`, `Quote`, `Code`, `Link`).
@@ -86,9 +89,11 @@ Thư mục lưu trữ: **`/docs/DAILY_LOG.md`** (Đi kèm kế hoạch **[`PROJE
 
 ---
 
-## Ngày 6 — Tích hợp Đồng bộ Google Keep & Tối ưu Giao diện Mobile / Tablet kiểu Notion
+## Ngày 6 — Xác thực Mức View Kiểu Notion (`LoginView`), Đồng bộ Google Keep & Tối ưu Giao diện Mobile / Tablet
 - **Hôm qua làm gì**: Hoàn thành đồng bộ cuộn ở chế độ Split và tính năng xuất file `.PDF` / `.MD`.
 - **Hôm nay làm gì**:
+  - Xây dựng màn hình **`LoginView.tsx`** phong cách Notion (100% tiếng Anh) hỗ trợ **`Sign In`**, **`Sign Up (New User)`** (lưu danh sách tài khoản vào `vibenotes_registered_users_v1`), **`Continue with Google`** và **`Explore Guest Workspace`**.
+  - Hiển thị tên User kèm Avatar viết tắt ở góc trái màn hình (trên đỉnh Sidebar và dưới góc trái Footer); khi click vào mở menu tài khoản với nút **`Sign Out`** thuần tiếng Anh.
   - Tích hợp xác thực Firebase Google OAuth và kết nối Google Keep REST API (`keep.googleapis.com/v1/notes`) kèm tính năng **Import / Export Keep JSON Snapshot** trong `GoogleKeepDrawer`.
   - Tái cấu trúc giao diện đa thiết bị (Mobile `< 768px` & Tablet `768px–1023px`) lấy cảm hứng từ **Notion**:
     - Chuyển Sidebar thành ngăn kéo trượt (`Slide-over Drawer`) có nền mờ `backdrop-blur-xs` trên màn hình `< 1024px` và tự đóng khi chọn ghi chú.
@@ -100,18 +105,20 @@ Thư mục lưu trữ: **`/docs/DAILY_LOG.md`** (Đi kèm kế hoạch **[`PROJE
   - *Vướng mắc 2*: Trên điện thoại, bố cục cũ để Sidebar chiếm chỗ và các nút công cụ tự xuống dòng gây hẹp vùng soạn thảo, cuộn thiếu độ mượt.
   - *Giải pháp 2*: Áp dụng ngăn kéo trượt `Slide-over Drawer`, thanh công cụ vuốt ngang 1 hàng, khung `100dvh` và class `.smooth-touch-scroll` tách biệt thanh cuộn cho từng khung.
 - **Commit tiêu biểu**:
+  - `feat(auth-view): add Notion-style Sign In / Sign Up login screen and left-corner user profile with English Sign Out popover`
   - `feat(keep-sync): integrate Google Keep REST API with confirmation dialogs and JSON backup fallback`
   - `feat(responsive): redesign mobile & tablet layout with Notion-style slide-over drawer, single-row touch toolbar, and smooth 100dvh split scrolling`
 
 ---
 
 ## Ngày 7 — Kiểm thử Tự động (`/tests`) & Đóng gói Tài liệu Tiến độ (`/docs`)
-- **Hôm qua làm gì**: Hoàn thiện ngăn kéo đồng bộ Google Keep và nâng cấp trải nghiệm Responsive trên Mobile/Tablet.
+- **Hôm qua làm gì**: Hoàn thiện màn hình đăng nhập/đăng ký kiểu Notion, ngăn kéo đồng bộ Google Keep và nâng cấp trải nghiệm Responsive trên Mobile/Tablet.
 - **Hôm nay làm gì**:
-  - Tổ chức thư mục `/tests` gồm 9 Unit Test Suites (`tests/unit/notesLogic.unit.test.ts`), 3 Integration Test Suites (`tests/integration/workspaceFlow.integration.test.ts`) và tài liệu 11 kịch bản kiểm thử thủ công (`tests/MANUAL_TEST_CASES.md`).
-  - Đóng gói toàn bộ file ghi log và kế hoạch tiến độ vào thư mục riêng **`/docs`** (`docs/DAILY_LOG.md`, `docs/PROJECT_PLAN_WBS.md`, `docs/PROJECT_PLAN_WBS.csv`) và đồng bộ `README.md`, `DECISIONS.md` theo code mới nhất.
+  - Tổ chức thư mục `/tests` gồm **10 Unit Test Suites** (`tests/unit/notesLogic.unit.test.ts`), **4 Integration Test Suites** (`tests/integration/workspaceFlow.integration.test.ts`) — tổng cộng **14/14 test suites tự động** — và tài liệu **13 kịch bản kiểm thử thủ công** (`tests/MANUAL_TEST_CASES.md`).
+  - Đóng gói toàn bộ file ghi log và kế hoạch tiến độ vào thư mục riêng **`/docs`** (`docs/DAILY_LOG.md`, `docs/PROJECT_PLAN_WBS.md`, `docs/PROJECT_PLAN_WBS.csv`) và đồng bộ 100% `README.md`, `DECISIONS.md`, `MANUAL_TEST_CASES.md` theo code mới nhất.
 - **Vướng mắc & Giải pháp**:
   - *Vướng mắc*: Khi hiển thị 10 phím tắt trong `ShortcutsModal` theo 1 cột dọc trên Desktop, mục cuối cùng dễ bị khuất nhẹ ở mép dưới.
-  - *Giải pháp*: Chuyển nội dung `ShortcutsModal` sang lưới 2 cột (`md:grid-cols-2`) trên màn hình Desktop để hiển thị trọn vẹn cả 10 phím tắt cùng lúc; toàn bộ 12/12 test suites trong `/tests` và `npm run build` đều đạt PASS 100%.
+  - *Giải pháp*: Chuyển nội dung `ShortcutsModal` sang lưới 2 cột (`md:grid-cols-2`) trên màn hình Desktop để hiển thị trọn vẹn cả 10 phím tắt cùng lúc; toàn bộ **14/14 test suites** trong `/tests` và `npm run build` đều đạt PASS 100%.
 - **Commit tiêu biểu**:
-  - `test(suite): add 12 unit/integration test suites in /tests and package project logs into /docs`
+  - `test(suite): add 14 unit/integration test suites in /tests and synchronize all project docs in /docs, README, and DECISIONS`
+

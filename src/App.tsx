@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { User } from 'firebase/auth';
-import { PanelLeft, Sun, Moon, Info } from 'lucide-react';
+import { PanelLeft, Sun, Moon, Info, LogOut, ChevronUp } from 'lucide-react';
 import {
   INITIAL_NOTES,
   TAG_CATEGORIES,
   NoteItem,
   NoteTag,
   TagColor,
+  NoteSortOption,
   filterAndSortNotes,
   createNewNoteItem,
   computeNoteMetrics,
@@ -20,6 +21,9 @@ import {
   getNoteVersionStack,
   recordNoteVersionSnapshot,
   restorePreviousNoteVersion,
+  WorkspaceUserProfile,
+  RegisteredWorkspaceAccount,
+  createGoogleDemoUserProfile,
 } from './utils/notesLogic';
 import { exportNoteToPdf } from './utils/pdfExport';
 import { initAuth, googleSignIn, logout } from './services/keepService';
@@ -28,10 +32,14 @@ import { NoteWorkspace, EditorViewMode } from './components/NoteWorkspace';
 import { GoogleKeepDrawer } from './components/GoogleKeepDrawer';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { ShortcutsModal } from './components/ShortcutsModal';
+import { LoginView } from './components/LoginView';
 
 const STORAGE_KEY = 'vibenotes_workspace_notes_v1';
 const FILTERS_STORAGE_KEY = 'vibenotes_custom_filters_v1';
 const VERSION_HISTORY_STORAGE_KEY = 'vibenotes_version_history_v1';
+const USER_PROFILE_STORAGE_KEY = 'vibenotes_user_profile_v1';
+const REGISTERED_USERS_STORAGE_KEY = 'vibenotes_registered_users_v1';
+const SORT_BY_STORAGE_KEY = 'vibenotes_sort_by_v1';
 const THEME_KEY = 'vibenotes_theme_v2';
 
 export default function App() {
@@ -95,6 +103,79 @@ export default function App() {
     return false;
   });
 
+  // 3b. View-level User Profile state (persisted to localStorage; supports ?autostart=1 bypass)
+  const [userProfile, setUserProfile] = useState<WorkspaceUserProfile | null>(() => {
+    try {
+      const raw = localStorage.getItem(USER_PROFILE_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.name === 'string' && parsed.name.trim()) {
+          return parsed;
+        }
+      }
+      if (
+        typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).get('autostart') === '1'
+      ) {
+        return createGoogleDemoUserProfile();
+      }
+    } catch (e) {
+      console.error('Failed to load user profile from localStorage:', e);
+    }
+    return null;
+  });
+
+  const [registeredAccounts, setRegisteredAccounts] = useState<
+    RegisteredWorkspaceAccount[]
+  >(() => {
+    try {
+      const raw = localStorage.getItem(REGISTERED_USERS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load registered accounts from localStorage:', e);
+    }
+    return [];
+  });
+
+  const [isFooterUserMenuOpen, setIsFooterUserMenuOpen] = useState(false);
+
+  const handleRegisterAccounts = (updatedAccounts: RegisteredWorkspaceAccount[]) => {
+    setRegisteredAccounts(updatedAccounts);
+    try {
+      localStorage.setItem(
+        REGISTERED_USERS_STORAGE_KEY,
+        JSON.stringify(updatedAccounts)
+      );
+    } catch (e) {
+      console.error('Failed to save registered accounts to localStorage:', e);
+    }
+  };
+
+  const handleLoginSuccess = (profile: WorkspaceUserProfile) => {
+    setUserProfile(profile);
+    setIsFooterUserMenuOpen(false);
+    try {
+      localStorage.setItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(profile));
+    } catch (e) {
+      console.error('Failed to save user profile to localStorage:', e);
+    }
+  };
+
+  const handleSignOutUser = () => {
+    setIsFooterUserMenuOpen(false);
+    setUserProfile(null);
+    try {
+      localStorage.removeItem(USER_PROFILE_STORAGE_KEY);
+    } catch (e) {
+      console.error('Failed to clear user profile from localStorage:', e);
+    }
+  };
+
   useEffect(() => {
     const root = document.documentElement;
     if (isDark) {
@@ -139,16 +220,35 @@ export default function App() {
     }
   }, [versionHistory]);
 
-  // 4. Active Note, Search, Filter, View Mode & Responsive Sidebar Drawer State
+  // 4. Active Note, Search, Filter, Sort, View Mode & Responsive Sidebar Drawer State
   const [activeNoteId, setActiveNoteId] = useState<string | null>(() =>
     notes.length > 0 ? notes[0].id : null
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<TagColor | 'all'>('all');
+  const [sortBy, setSortBy] = useState<NoteSortOption>(() => {
+    try {
+      const saved = localStorage.getItem(SORT_BY_STORAGE_KEY);
+      if (saved === 'dateModified' || saved === 'title' || saved === 'pinned') {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return 'pinned';
+  });
   const [viewMode, setViewMode] = useState<EditorViewMode>('split');
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
   );
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SORT_BY_STORAGE_KEY, sortBy);
+    } catch {
+      // ignore
+    }
+  }, [sortBy]);
 
   // Automatically adapt sidebar drawer when crossing the 1024px breakpoint (e.g. rotating tablet or resizing)
   useEffect(() => {
@@ -189,8 +289,8 @@ export default function App() {
   }, []);
 
   const filteredNotes = useMemo(
-    () => filterAndSortNotes(notes, searchQuery, selectedTag, allFilters),
-    [notes, searchQuery, selectedTag, allFilters]
+    () => filterAndSortNotes(notes, searchQuery, selectedTag, allFilters, sortBy),
+    [notes, searchQuery, selectedTag, allFilters, sortBy]
   );
 
   const activeNote = useMemo(
@@ -440,6 +540,18 @@ export default function App() {
     }
   };
 
+  if (!userProfile) {
+    return (
+      <LoginView
+        isDark={isDark}
+        onToggleTheme={() => setIsDark((prev) => !prev)}
+        registeredAccounts={registeredAccounts}
+        onRegisterAccount={handleRegisterAccounts}
+        onLoginSuccess={handleLoginSuccess}
+      />
+    );
+  }
+
   return (
     <div
       className={`h-[100dvh] w-screen overflow-hidden grid grid-rows-[auto_1fr_auto] bg-[var(--bg)] text-[var(--ink)] ${
@@ -564,10 +676,14 @@ export default function App() {
         activeNoteId={activeNoteId}
         searchQuery={searchQuery}
         selectedTag={selectedTag}
+        sortBy={sortBy}
         isOpen={isSidebarOpen}
+        userProfile={userProfile}
+        onSignOut={handleSignOutUser}
         onCloseMobile={() => setIsSidebarOpen(false)}
         onSearchChange={setSearchQuery}
         onSelectTag={setSelectedTag}
+        onSelectSortBy={setSortBy}
         onCreateFilter={handleCreateFilter}
         onDeleteCustomFilter={handleDeleteCustomFilter}
         onMoveNoteToFilter={handleMoveNoteToFilter}
@@ -600,10 +716,57 @@ export default function App() {
         }
       />
 
-      {/* Full-Width Editorial Footer */}
-      <footer className="col-span-full px-4 sm:px-8 py-2.5 sm:py-3 border-t-[1.5px] border-[var(--ink)] bg-[var(--bg)] flex flex-wrap items-center justify-between gap-2 sm:gap-4 shrink-0">
-        <div className="editorial-label !text-[0.58rem] sm:!text-[0.65rem]">
-          {metrics.words} Words · {metrics.characters} Chars · {metrics.lines} Lines · ~{metrics.readingTimeMin} Min Read
+      {/* Full-Width Editorial Footer (Click User Name in bottom-left corner to open Sign Out menu) */}
+      <footer className="relative col-span-full px-4 sm:px-8 py-2.5 sm:py-3 border-t-[1.5px] border-[var(--ink)] bg-[var(--bg)] flex flex-wrap items-center justify-between gap-2 sm:gap-4 shrink-0">
+        <div className="relative flex items-center gap-1.5 editorial-label !text-[0.58rem] sm:!text-[0.65rem]">
+          <button
+            type="button"
+            data-testid="footer-user-profile"
+            onClick={() => setIsFooterUserMenuOpen((prev) => !prev)}
+            aria-expanded={isFooterUserMenuOpen}
+            aria-haspopup="menu"
+            title="Click user name to open Sign Out menu"
+            className="inline-flex items-center gap-1 font-bold text-[var(--ink)] hover:underline cursor-pointer"
+          >
+            <span>{userProfile.name}</span>
+            <ChevronUp
+              className={`w-3 h-3 transition-transform duration-150 ${
+                isFooterUserMenuOpen ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+
+          {isFooterUserMenuOpen && (
+            <div
+              role="menu"
+              data-testid="footer-user-menu"
+              className="absolute bottom-full left-0 mb-2.5 w-64 p-3.5 border-[1.5px] border-[var(--ink)] bg-[var(--surface)] shadow-xl z-50 space-y-2.5"
+            >
+              <div className="border-b border-[var(--ink-faint)] pb-2">
+                <div className="text-xs font-semibold text-[var(--ink)] truncate normal-case tracking-normal">
+                  {userProfile.name}
+                </div>
+                <div className="editorial-label !text-[0.55rem] truncate mt-0.5">
+                  {userProfile.email}
+                </div>
+              </div>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="footer-signout-button"
+                onClick={handleSignOutUser}
+                aria-label="Sign out from bottom-left user menu"
+                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 border border-[var(--ink)] bg-[var(--bg)] hover:bg-[var(--ink)] text-[var(--ink)] hover:text-[var(--bg)] text-[0.62rem] font-mono uppercase tracking-wider font-semibold transition-colors cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          )}
+
+          <span>
+            · {metrics.words} Words · {metrics.characters} Chars · {metrics.lines} Lines · ~{metrics.readingTimeMin} Min Read
+          </span>
         </div>
         <div className="editorial-label !text-[0.58rem] sm:!text-[0.65rem]">
           Saved · Updated{' '}

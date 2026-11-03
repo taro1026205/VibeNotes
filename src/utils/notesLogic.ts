@@ -149,7 +149,7 @@ A curated list of books and essays on software craft, architecture, and cognitiv
     tag: 'amber',
     pinned: false,
     createdAt: '2026-10-24T11:00:00.000Z',
-    updatedAt: '2026-10-29T16:10:00.000Z',
+    updatedAt: '2026-11-02T09:10:00.000Z',
   },
   {
     id: 'note-sprint-checklist',
@@ -168,6 +168,59 @@ Before cutting the weekly production release, verify the following items:
     updatedAt: '2026-10-27T12:00:00.000Z',
   },
 ];
+
+export type NoteSortOption = 'pinned' | 'dateModified' | 'title';
+
+export interface NoteSortMetadata {
+  id: NoteSortOption;
+  label: string;
+}
+
+export const NOTE_SORT_OPTIONS: NoteSortMetadata[] = [
+  { id: 'dateModified', label: 'Date Modified' },
+  { id: 'title', label: 'Title' },
+  { id: 'pinned', label: 'Pinned' },
+];
+
+/**
+ * Sorts a list of notes according to the selected NoteSortOption:
+ * - 'pinned': Pinned notes first, then by updatedAt descending
+ * - 'dateModified': Strictly by updatedAt descending (most recently modified first)
+ * - 'title': Alphabetically A-Z by note title (case-insensitive, numeric-aware)
+ */
+export function sortNotesByOption(
+  notes: NoteItem[],
+  sortBy: NoteSortOption = 'pinned'
+): NoteItem[] {
+  return [...notes].sort((a, b) => {
+    if (sortBy === 'title') {
+      const titleA = (a.title || 'Untitled Note').trim();
+      const titleB = (b.title || 'Untitled Note').trim();
+      const cmp = titleA.localeCompare(titleB, undefined, {
+        sensitivity: 'base',
+        numeric: true,
+      });
+      if (cmp !== 0) return cmp;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    }
+
+    if (sortBy === 'dateModified') {
+      const timeDiff =
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      if (timeDiff !== 0) return timeDiff;
+      return (a.title || '').localeCompare(b.title || '', undefined, {
+        sensitivity: 'base',
+        numeric: true,
+      });
+    }
+
+    // Default 'pinned': pinned notes first, then by updatedAt descending
+    if (a.pinned !== b.pinned) {
+      return a.pinned ? -1 : 1;
+    }
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
+}
 
 /**
  * Returns tag metadata for a given TagColor from provided filters list (or default TAG_CATEGORIES)
@@ -286,34 +339,30 @@ export function moveNoteToFilter(
  * Filters and sorts notes:
  * - Filters by searchQuery (matching title, content, or filter label, case-insensitive)
  * - Filters by selectedTag ('all' or specific TagColor)
- * - Sorts pinned notes first, then by updatedAt descending
+ * - Sorts according to sortBy ('pinned' | 'dateModified' | 'title', default 'pinned')
  */
 export function filterAndSortNotes(
   notes: NoteItem[],
   searchQuery: string,
   selectedTag: TagColor | 'all',
-  allFilters: NoteTag[] = TAG_CATEGORIES
+  allFilters: NoteTag[] = TAG_CATEGORIES,
+  sortBy: NoteSortOption = 'pinned'
 ): NoteItem[] {
   const normalizedQuery = searchQuery.trim().toLowerCase();
 
-  return notes
-    .filter((note) => {
-      const matchesTag = selectedTag === 'all' || note.tag === selectedTag;
-      if (!matchesTag) return false;
+  const filtered = notes.filter((note) => {
+    const matchesTag = selectedTag === 'all' || note.tag === selectedTag;
+    if (!matchesTag) return false;
 
-      if (!normalizedQuery) return true;
-      const inTitle = note.title.toLowerCase().includes(normalizedQuery);
-      const inContent = note.content.toLowerCase().includes(normalizedQuery);
-      const tagLabel = getTagMetadata(note.tag, allFilters).label.toLowerCase();
-      const inTag = tagLabel.includes(normalizedQuery);
-      return inTitle || inContent || inTag;
-    })
-    .sort((a, b) => {
-      if (a.pinned !== b.pinned) {
-        return a.pinned ? -1 : 1;
-      }
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-    });
+    if (!normalizedQuery) return true;
+    const inTitle = note.title.toLowerCase().includes(normalizedQuery);
+    const inContent = note.content.toLowerCase().includes(normalizedQuery);
+    const tagLabel = getTagMetadata(note.tag, allFilters).label.toLowerCase();
+    const inTag = tagLabel.includes(normalizedQuery);
+    return inTitle || inContent || inTag;
+  });
+
+  return sortNotesByOption(filtered, sortBy);
 }
 
 /**
@@ -1046,3 +1095,244 @@ export function restorePreviousNoteVersion(
     restoredSnapshot,
   };
 }
+
+export type AuthProviderType = 'email' | 'google' | 'guest';
+export type AuthViewMode = 'signin' | 'signup';
+
+export interface WorkspaceUserProfile {
+  name: string;
+  email: string;
+  provider: AuthProviderType;
+  signedInAt: string;
+  isNewUser?: boolean;
+}
+
+export interface RegisteredWorkspaceAccount {
+  name: string;
+  email: string;
+  password: string;
+  createdAt: string;
+}
+
+/**
+ * Derives a clean, human-readable display name from an email address.
+ * Example: "hoang.nguyen_106@gmail.com" -> "Hoang Nguyen 106"
+ */
+export function deriveUserNameFromEmail(email: string): string {
+  const trimmed = (email || '').trim();
+  if (!trimmed) return 'Guest Writer';
+
+  const localPart = trimmed.split('@')[0] || '';
+  const words = localPart
+    .replace(/[._-]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 0) return 'Guest Writer';
+
+  return words
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+/**
+ * Validates view-level email & password Sign In inputs and constructs a WorkspaceUserProfile.
+ * If the email belongs to a registered local account, verifies the password and uses the saved name.
+ */
+export function validateEmailLoginInput(
+  rawEmail: string,
+  rawPassword: string,
+  rawDisplayName?: string,
+  registeredAccounts: RegisteredWorkspaceAccount[] = []
+): {
+  ok: boolean;
+  profile: WorkspaceUserProfile | null;
+  error?: string;
+} {
+  const email = (rawEmail || '').trim().toLowerCase();
+  const password = rawPassword || '';
+  const customName = (rawDisplayName || '').trim();
+
+  if (!email) {
+    return {
+      ok: false,
+      profile: null,
+      error: 'Please enter your email address.',
+    };
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return {
+      ok: false,
+      profile: null,
+      error: 'Please enter a valid email address (e.g. name@domain.com).',
+    };
+  }
+
+  if (password.trim().length < 4) {
+    return {
+      ok: false,
+      profile: null,
+      error: 'Password must be at least 4 characters.',
+    };
+  }
+
+  const matchedAccount = registeredAccounts.find(
+    (acc) => acc.email.toLowerCase() === email
+  );
+
+  if (matchedAccount && matchedAccount.password !== password) {
+    return {
+      ok: false,
+      profile: null,
+      error: 'Incorrect password for this account. Please try again.',
+    };
+  }
+
+  const resolvedName =
+    customName || matchedAccount?.name || deriveUserNameFromEmail(email);
+
+  return {
+    ok: true,
+    profile: {
+      name: resolvedName,
+      email,
+      provider: 'email',
+      signedInAt: new Date().toISOString(),
+      isNewUser: false,
+    },
+  };
+}
+
+/**
+ * Validates Notion-style Sign Up (New User) inputs, checks for duplicate registered emails,
+ * and returns both the new RegisteredWorkspaceAccount and active WorkspaceUserProfile.
+ */
+export function validateEmailSignUpInput(
+  rawFullName: string,
+  rawEmail: string,
+  rawPassword: string,
+  rawConfirmPassword?: string,
+  registeredAccounts: RegisteredWorkspaceAccount[] = []
+): {
+  ok: boolean;
+  profile: WorkspaceUserProfile | null;
+  registeredAccount: RegisteredWorkspaceAccount | null;
+  updatedAccounts: RegisteredWorkspaceAccount[];
+  error?: string;
+} {
+  const fullName = (rawFullName || '').trim();
+  const email = (rawEmail || '').trim().toLowerCase();
+  const password = rawPassword || '';
+  const confirmPassword =
+    rawConfirmPassword !== undefined ? rawConfirmPassword : password;
+
+  if (!fullName || fullName.length < 2) {
+    return {
+      ok: false,
+      profile: null,
+      registeredAccount: null,
+      updatedAccounts: registeredAccounts,
+      error: 'Please enter your full name (at least 2 characters).',
+    };
+  }
+
+  if (!email) {
+    return {
+      ok: false,
+      profile: null,
+      registeredAccount: null,
+      updatedAccounts: registeredAccounts,
+      error: 'Please enter your email address.',
+    };
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return {
+      ok: false,
+      profile: null,
+      registeredAccount: null,
+      updatedAccounts: registeredAccounts,
+      error: 'Please enter a valid email address (e.g. name@domain.com).',
+    };
+  }
+
+  if (password.trim().length < 4) {
+    return {
+      ok: false,
+      profile: null,
+      registeredAccount: null,
+      updatedAccounts: registeredAccounts,
+      error: 'Password must be at least 4 characters.',
+    };
+  }
+
+  if (password !== confirmPassword) {
+    return {
+      ok: false,
+      profile: null,
+      registeredAccount: null,
+      updatedAccounts: registeredAccounts,
+      error: 'Passwords do not match. Please confirm your password.',
+    };
+  }
+
+  const existing = registeredAccounts.find(
+    (acc) => acc.email.toLowerCase() === email
+  );
+  if (existing) {
+    return {
+      ok: false,
+      profile: null,
+      registeredAccount: null,
+      updatedAccounts: registeredAccounts,
+      error: 'An account with this email already exists. Please sign in instead.',
+    };
+  }
+
+  const now = new Date().toISOString();
+  const registeredAccount: RegisteredWorkspaceAccount = {
+    name: fullName,
+    email,
+    password,
+    createdAt: now,
+  };
+
+  return {
+    ok: true,
+    profile: {
+      name: fullName,
+      email,
+      provider: 'email',
+      signedInAt: now,
+      isNewUser: true,
+    },
+    registeredAccount,
+    updatedAccounts: [...registeredAccounts, registeredAccount],
+  };
+}
+
+/**
+ * Creates a view-level Google Account user profile for instant sign-in or sign-up.
+ */
+export function createGoogleDemoUserProfile(
+  customEmail?: string,
+  customName?: string
+): WorkspaceUserProfile {
+  const email = (customEmail || '').trim().toLowerCase() || 'nvhoang10605@gmail.com';
+  const name =
+    (customName || '').trim() ||
+    (customEmail ? deriveUserNameFromEmail(email) : 'Hoang Nguyen');
+
+  return {
+    name,
+    email,
+    provider: 'google',
+    signedInAt: new Date().toISOString(),
+  };
+}
+
+

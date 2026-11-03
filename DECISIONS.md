@@ -7,11 +7,11 @@ Tài liệu này trình bày các quyết định lựa chọn công nghệ, ki�
 ## 1. Kiến trúc Ứng dụng: React 19 + TypeScript + Vite (SPA)
 - **Quyết định**: Xây dựng dưới dạng Single-Page Application (SPA) với **React 19**, **TypeScript**, và **Vite**.
 - **Lý do**:
-  - Tốc độ phản hồi tức thì khi chuyển đổi giữa các ghi chú, tìm kiếm thời gian thực (real-time search) theo **Tiêu đề / Nội dung / Filter** và chuyển chế độ xem (`Edit` / `Split` / `Preview`) mà không phải tải lại trang.
-  - TypeScript đảm bảo an toàn kiểu dữ liệu cho cấu trúc ghi chú (`NoteItem`), bộ lọc (`NoteTag`), lịch sử chỉnh sửa (`EditorHistoryState`), lịch sử phiên bản cục bộ (`NoteVersionSnapshot`), danh mục phím tắt (`ShortcutInfoItem`) và trạng thái đồng bộ Google Keep.
+  - Tốc độ phản hồi tức thì khi chuyển đổi giữa các ghi chú, tìm kiếm thời gian thực (real-time search) theo **Tiêu đề / Nội dung / Filter**, sắp xếp danh sách ghi chú theo **3 chế độ (`Date Modified`, `Title`, `Pinned`)** và chuyển chế độ xem (`Edit` / `Split` / `Preview`) mà không phải tải lại trang.
+  - TypeScript đảm bảo an toàn kiểu dữ liệu cho cấu trúc ghi chú (`NoteItem`), bộ lọc (`NoteTag`), tuỳ chọn sắp xếp (`NoteSortOption`, `NoteSortMetadata`), hồ sơ người dùng (`WorkspaceUserProfile`, `RegisteredWorkspaceAccount`), lịch sử chỉnh sửa (`EditorHistoryState`), lịch sử phiên bản cục bộ (`NoteVersionSnapshot`), danh mục phím tắt (`ShortcutInfoItem`) và trạng thái đồng bộ Google Keep.
 
 ## 2. Lưu trữ Dữ liệu Cục bộ & Hệ thống Lịch sử Phiên bản (`localStorage` + `Restore previous version`)
-- **Quyết định**: Sử dụng **`localStorage`** làm tầng lưu trữ chính cho danh sách ghi chú (`vibenotes_workspace_notes_v1`), danh sách filter (`vibenotes_custom_filters_v1`), và ngăn xếp lịch sử phiên bản của từng ghi chú (`vibenotes_version_history_v1`, giới hạn `MAX_NOTE_VERSIONS = 10` bản/ghi chú) kèm nút **`Restore previous version`** trên thanh điều khiển trình soạn thảo.
+- **Quyết định**: Sử dụng **`localStorage`** làm tầng lưu trữ chính cho danh sách ghi chú (`vibenotes_workspace_notes_v1`), danh sách filter (`vibenotes_custom_filters_v1`), tuỳ chọn sắp xếp Sidebar (`vibenotes_sort_by_v1`), hồ sơ phiên đăng nhập & danh sách tài khoản đăng ký mức View (`vibenotes_user_profile_v1`, `vibenotes_registered_users_v1`), và ngăn xếp lịch sử phiên bản của từng ghi chú (`vibenotes_version_history_v1`, giới hạn `MAX_NOTE_VERSIONS = 10` bản/ghi chú) kèm nút **`Restore previous version`** trên thanh điều khiển trình soạn thảo.
 - **Lý do**:
   - **Không cần cài đặt database server phức tạp**, độ trễ lưu trữ bằng `0ms`, dữ liệu và lịch sử phiên bản bền vững ngay cả khi làm mới trang (F5) hoặc mất kết nối mạng.
   - Khi người dùng sửa nội dung hoặc tiêu đề, hàm thuần túy `recordNoteVersionSnapshot` tự động đẩy bản ghi trước đó vào ngăn xếp (loại bỏ trùng lặp liên tiếp và giới hạn 10 phiên bản gần nhất để bảo vệ dung lượng `localStorage`). Khi nhấn **`Restore previous version`**, hàm `restorePreviousNoteVersion` lấy ra bản ghi gần nhất và khôi phục tức thì.
@@ -40,17 +40,22 @@ Tài liệu này trình bày các quyết định lựa chọn công nghệ, ki�
 - **Lý do**:
   - Phương thức vẽ chữ mặc định của `jsPDF` dễ bị lỗi dấu tiếng Việt và mất định dạng bảng biểu/code block. Việc kết xuất trang tài liệu chuẩn Editorial ra canvas độ phân giải cao (`scale: 2`) trước khi đóng gói vào `jsPDF` giúp bảo toàn 100% tiếng Việt có dấu, phông chữ và bố cục Markdown, đồng thời tải trực tiếp file `.pdf` về máy mà không bị chặn popup trong môi trường iframe.
 
-## 7. Tổ chức & Phân loại Ghi chú: Hệ thống Filter Động + Kéo thả (Drag & Drop)
-- **Quyết định**: Lưu danh sách Filter tách biệt trong `localStorage` và cho phép tạo mới, xoá bất kỳ filter nào (trừ `All`), hoặc di chuyển ghi chú giữa các filter bằng menu chọn trực tiếp (`<select>`) lẫn kéo-thả HTML5 (`Drag & Drop`).
+## 7. Tổ chức, Phân loại & Sắp xếp Ghi chú Đa chế độ (`Sort By: Date Modified / Title / Pinned`)
+- **Quyết định**:
+  - Lưu danh sách Filter tách biệt trong `localStorage` và cho phép tạo mới, xoá bất kỳ filter nào (trừ `All`), hoặc di chuyển ghi chú giữa các filter bằng menu chọn trực tiếp (`<select>`) lẫn kéo-thả HTML5 (`Drag & Drop`).
+  - Bổ sung thanh chọn **`Sort By`** (`data-testid="sidebar-sort-select"`) ngay trên Sidebar kết hợp hàm thuần túy **`sortNotesByOption(notes, sortBy)`** hỗ trợ 3 chế độ sắp xếp: **`Date Modified`** (`dateModified` — mới chỉnh sửa nhất lên đầu), **`Title`** (`title` — bảng chữ cái A–Z không phân biệt hoa thường, có nhận diện số `numeric: true`), và **`Pinned`** (`pinned` — tách nhóm `Pinned` lên trên nhóm `Notes`).
 - **Lý do**:
-  - Linh hoạt hơn hệ thống nhãn cố định: khi một filter bị xoá, các ghi chú thuộc filter đó được tự động chuyển về filter hợp lệ tiếp theo để không làm mồ côi dữ liệu.
-  - Bỏ các nhãn chữ rườm rà trên thẻ ghi chú, chỉ giữ dropdown chọn filter gọn nhẹ giúp giao diện sạch sẽ, thao tác 1 chạm.
+  - Khi số lượng ghi chú tăng lên, người dùng có thể chuyển nhanh giữa việc xem các ghi chú quan trọng đã ghim (`Pinned`), tra cứu theo tên tài liệu (`Title A–Z`), hoặc xem các ghi chú vừa cập nhật gần nhất (`Date Modified`).
+  - Khi một filter bị xoá, các ghi chú thuộc filter đó được tự động chuyển về filter hợp lệ tiếp theo để không làm mồ côi dữ liệu.
 
-## 8. Đồng bộ Đám mây: Google Keep REST API + Firebase Google OAuth
-- **Quyết định**: Tích hợp trực tiếp **Google Keep API (`keep.googleapis.com/v1/notes`)** thông qua xác thực **Firebase Authentication (Google Sign-In popup)** phía client và bổ sung công cụ Import/Export JSON dự phòng.
+## 8. Xác thực Mức View Kiểu Notion (`LoginView`: `Sign In` / `Sign Up` / `Google`) & Đồng bộ Google Keep
+- **Quyết định**:
+  - Thiết kế màn hình **`LoginView.tsx`** (giao diện 100% tiếng Anh lấy cảm hứng từ Notion) hỗ trợ chuyển đổi mượt giữa 2 chế độ **`Sign In`** và **`Sign Up (New User)`**, đăng nhập nhanh qua **`Continue with Google`** hoặc **`Explore Guest Workspace`**.
+  - Hiển thị tên User kèm Avatar viết tắt ở góc trái màn hình (trên đỉnh Sidebar `data-testid="sidebar-user-profile"` và dưới góc trái thanh trạng thái `data-testid="footer-user-profile"`), khi click vào sẽ mở popover hiển thị thông tin tài khoản và nút **`Sign Out`**.
+  - Tích hợp **Google Keep API (`keep.googleapis.com/v1/notes`)** thông qua **Firebase Authentication (Google Sign-In popup)** trong ngăn kéo đồng bộ kèm công cụ Import/Export JSON dự phòng.
 - **Lý do**:
-  - Cho phép người dùng liên kết tài khoản Google thực tế để xem, đẩy (push) ghi chú Markdown lên Google Keep hoặc xoá ghi chú đồng bộ sau khi xác nhận qua `ConfirmDialog`.
-  - Bổ sung chế độ Import/Export JSON giúp người dùng tài khoản Gmail cá nhân vẫn sao lưu/khôi phục được dữ liệu ngay cả khi miền Workspace chưa bật quyền Enterprise Keep API.
+  - Đáp ứng trọn vẹn trải nghiệm cá nhân hoá Workspace ở mức View (lưu tài khoản đăng ký mới vào `vibenotes_registered_users_v1`, kiểm tra trùng email, đối chiếu mật khẩu và giữ phiên trong `vibenotes_user_profile_v1`) mà không bắt buộc phụ thuộc server backend.
+  - Kết hợp chế độ Import/Export JSON trong `GoogleKeepDrawer` giúp mọi tài khoản đều sao lưu/khôi phục dữ liệu trơn tru.
 
 ## 9. Thiết kế Giao diện & Đa thiết bị (Responsive Notion-Style UX cho Mobile, Tablet & Desktop)
 - **Quyết định**: Sử dụng **Tailwind CSS v4** kết hợp bộ biến CSS (`--bg`, `--surface`, `--ink`, `--accent`), chiều cao khung nhìn động **`100dvh`**, cơ chế cuộn cảm ứng quán tính **`.smooth-touch-scroll`**, và bố cục thích ứng đa thiết bị lấy cảm hứng từ **Notion**:
@@ -60,7 +65,8 @@ Tài liệu này trình bày các quyết định lựa chọn công nghệ, ki�
 
 ## 10. Kiểm thử Logic Cốt lõi (`/tests`) & Quản lý Tiến độ (`/docs`)
 - **Quyết định**:
-  - Tách toàn bộ nghiệp vụ tìm kiếm, lọc, sắp xếp, thống kê từ, chèn Markdown, auto-complete, Undo/Redo, lịch sử phiên bản `localStorage` (`recordNoteVersionSnapshot`, `restorePreviousNoteVersion`), đồng bộ cuộn, phân giải phím tắt và xuất PDF thành các hàm thuần túy (pure functions) trong `src/utils/notesLogic.ts` và tổ chức kiểm thử tập trung trong thư mục **`/tests`**.
+  - Tách toàn bộ nghiệp vụ tìm kiếm, lọc, sắp xếp 3 chế độ (`sortNotesByOption`), thống kê từ, chèn Markdown, auto-complete, Undo/Redo, lịch sử phiên bản `localStorage` (`recordNoteVersionSnapshot`, `restorePreviousNoteVersion`), xác thực `Sign In` / `Sign Up` (`validateEmailLoginInput`, `validateEmailSignUpInput`), đồng bộ cuộn, phân giải phím tắt và xuất PDF thành các hàm thuần túy (pure functions) trong `src/utils/notesLogic.ts` và tổ chức kiểm thử tập trung trong thư mục **`/tests`**.
   - Đóng gói toàn bộ tài liệu kế hoạch phân rã công việc (`PROJECT_PLAN_WBS.md`, `PROJECT_PLAN_WBS.csv`) và nhật ký tiến độ hàng ngày (`DAILY_LOG.md`) vào thư mục **`/docs`** để giữ thư mục gốc gọn gàng.
 - **Lý do**:
-  - Chạy toàn bộ 9 Unit Test Suites (`tests/unit/notesLogic.unit.test.ts`) và 3 Integration Test Suites (`tests/integration/workspaceFlow.integration.test.ts`) qua `npm test` dưới 1 giây, kết hợp bảng 11 kịch bản kiểm thử thủ công (`tests/MANUAL_TEST_CASES.md`) giúp đảm bảo chất lượng đầu-cuối.
+  - Chạy toàn bộ **10 Unit Test Suites** (`tests/unit/notesLogic.unit.test.ts`) và **4 Integration Test Suites** (`tests/integration/workspaceFlow.integration.test.ts`) — tổng cộng **14/14 test suites** — qua `npm test` dưới 1 giây, kết hợp bảng **13 kịch bản kiểm thử thủ công** (`tests/MANUAL_TEST_CASES.md`) giúp đảm bảo chất lượng đầu-cuối.
+

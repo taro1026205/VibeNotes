@@ -8,6 +8,8 @@ import {
   createCustomFilter,
   deleteFilterFromList,
   moveNoteToFilter,
+  NOTE_SORT_OPTIONS,
+  sortNotesByOption,
   filterAndSortNotes,
   computeNoteMetrics,
   extractPlainTextSnippet,
@@ -29,6 +31,10 @@ import {
   getNoteVersionStack,
   recordNoteVersionSnapshot,
   restorePreviousNoteVersion,
+  deriveUserNameFromEmail,
+  validateEmailLoginInput,
+  validateEmailSignUpInput,
+  createGoogleDemoUserProfile,
 } from '../../src/utils/notesLogic';
 
 const mockNotes: NoteItem[] = [
@@ -79,11 +85,48 @@ test('[Unit] createNewNoteItem creates a valid note with defaults and custom ove
   assert.equal(customNote.pinned, true);
 });
 
-test('[Unit] filterAndSortNotes sorts pinned first, then updatedAt descending, and searches title/content/filter', () => {
-  const allSorted = filterAndSortNotes(mockNotes, '', 'all', TAG_CATEGORIES);
+test('[Unit] filterAndSortNotes and sortNotesByOption support Pinned, Date Modified, and Title sort modes and search title/content/filter', () => {
+  // Verify NOTE_SORT_OPTIONS exposes Date Modified, Title, and Pinned
   assert.deepEqual(
-    allSorted.map((n) => n.id),
+    NOTE_SORT_OPTIONS.map((o) => o.label),
+    ['Date Modified', 'Title', 'Pinned']
+  );
+
+  // 1. Default / 'pinned' sort: pinned first (note-2), then updatedAt descending (note-3 -> note-1)
+  const allSortedPinned = filterAndSortNotes(mockNotes, '', 'all', TAG_CATEGORIES, 'pinned');
+  assert.deepEqual(
+    allSortedPinned.map((n) => n.id),
     ['note-2', 'note-3', 'note-1']
+  );
+
+  // 2. 'dateModified' sort: strictly newest updatedAt first regardless of pinned status (note-3 Oct 15 -> note-1 Oct 1 -> note-2 Sep 20)
+  const allSortedByDate = filterAndSortNotes(
+    mockNotes,
+    '',
+    'all',
+    TAG_CATEGORIES,
+    'dateModified'
+  );
+  assert.deepEqual(
+    allSortedByDate.map((n) => n.id),
+    ['note-3', 'note-1', 'note-2']
+  );
+
+  // 3. 'title' sort: alphabetical A-Z by title ('Architecture Blueprint' -> 'Research Paper Summary' -> 'Sprint Retrospective')
+  const allSortedByTitle = filterAndSortNotes(
+    mockNotes,
+    '',
+    'all',
+    TAG_CATEGORIES,
+    'title'
+  );
+  assert.deepEqual(
+    allSortedByTitle.map((n) => n.id),
+    ['note-1', 'note-3', 'note-2']
+  );
+  assert.deepEqual(
+    sortNotesByOption(mockNotes, 'title').map((n) => n.title),
+    ['Architecture Blueprint', 'Research Paper Summary', 'Sprint Retrospective']
   );
 
   // Search by Title
@@ -268,5 +311,88 @@ test('[Unit] Local note version history stack records snapshots and restores pre
   );
   assert.equal(MAX_NOTE_VERSIONS, 10);
 });
+
+test('[Unit] View-level Sign In and Sign Up (New User) validation handle email, registered accounts, and Google accounts', () => {
+  assert.equal(deriveUserNameFromEmail('hoang.nguyen_106@gmail.com'), 'Hoang Nguyen 106');
+  assert.equal(deriveUserNameFromEmail(''), 'Guest Writer');
+
+  const emptyEmail = validateEmailLoginInput('', '1234');
+  assert.equal(emptyEmail.ok, false);
+  assert.ok(emptyEmail.error?.includes('email'));
+
+  const invalidEmail = validateEmailLoginInput('invalid-email', '1234');
+  assert.equal(invalidEmail.ok, false);
+
+  const shortPass = validateEmailLoginInput('hoang@example.com', '12');
+  assert.equal(shortPass.ok, false);
+  assert.ok(shortPass.error?.includes('4 characters'));
+
+  const validLogin = validateEmailLoginInput('hoang.nguyen@example.com', 'secret123');
+  assert.equal(validLogin.ok, true);
+  assert.equal(validLogin.profile?.name, 'Hoang Nguyen');
+  assert.equal(validLogin.profile?.provider, 'email');
+
+  // Sign Up (New User) validation
+  const missingName = validateEmailSignUpInput('', 'new@vibenotes.io', 'pass123', 'pass123');
+  assert.equal(missingName.ok, false);
+  assert.ok(missingName.error?.includes('full name'));
+
+  const mismatchPass = validateEmailSignUpInput(
+    'Alex Rivera',
+    'alex@vibenotes.io',
+    'pass123',
+    'different123'
+  );
+  assert.equal(mismatchPass.ok, false);
+  assert.ok(mismatchPass.error?.includes('do not match'));
+
+  const validSignUp = validateEmailSignUpInput(
+    'Alex Rivera',
+    'alex@vibenotes.io',
+    'pass123',
+    'pass123',
+    []
+  );
+  assert.equal(validSignUp.ok, true);
+  assert.equal(validSignUp.profile?.name, 'Alex Rivera');
+  assert.equal(validSignUp.profile?.isNewUser, true);
+  assert.equal(validSignUp.updatedAccounts.length, 1);
+
+  // Duplicate email Sign Up should be rejected
+  const duplicateSignUp = validateEmailSignUpInput(
+    'Alex Clone',
+    'ALEX@vibenotes.io',
+    'pass123',
+    'pass123',
+    validSignUp.updatedAccounts
+  );
+  assert.equal(duplicateSignUp.ok, false);
+  assert.ok(duplicateSignUp.error?.includes('already exists'));
+
+  // Sign In with registered account: wrong password fails, right password resolves saved full name
+  const wrongPassLogin = validateEmailLoginInput(
+    'alex@vibenotes.io',
+    'wrong999',
+    '',
+    validSignUp.updatedAccounts
+  );
+  assert.equal(wrongPassLogin.ok, false);
+  assert.ok(wrongPassLogin.error?.includes('Incorrect password'));
+
+  const registeredLogin = validateEmailLoginInput(
+    'alex@vibenotes.io',
+    'pass123',
+    '',
+    validSignUp.updatedAccounts
+  );
+  assert.equal(registeredLogin.ok, true);
+  assert.equal(registeredLogin.profile?.name, 'Alex Rivera');
+
+  const googleProfile = createGoogleDemoUserProfile();
+  assert.equal(googleProfile.provider, 'google');
+  assert.equal(googleProfile.name, 'Hoang Nguyen');
+});
+
+
 
 
