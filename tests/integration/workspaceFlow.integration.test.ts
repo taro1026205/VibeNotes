@@ -29,6 +29,11 @@ import {
   validateEmailSignUpInput,
   validateEmailLoginInput,
   createGoogleDemoUserProfile,
+  SAVE_TOAST_DEBOUNCE_MS,
+  createInitialSaveToastState,
+  transitionSaveToastOnEdit,
+  transitionSaveToastOnDebounceComplete,
+  transitionSaveToastOnReset,
 } from '../../src/utils/notesLogic';
 
 test('[Integration Flow 1] Note Authoring -> Toolbar Formatting -> Auto-Complete -> Undo/Redo -> Local Version Restore -> PDF Export HTML', () => {
@@ -61,6 +66,17 @@ test('[Integration Flow 1] Note Authoring -> Toolbar Formatting -> Auto-Complete
   });
   assert.ok(note.content.includes('**Local-First Storage**'));
   assert.equal(getNoteVersionStack(versionHistoryMap, note.id).length, 1);
+
+  // Step 2b: Typing/editing arms the 2-second (2000ms) debounce timer and transitions to 'saved' once typing stops
+  assert.equal(SAVE_TOAST_DEBOUNCE_MS, 2000);
+  let saveToast = createInitialSaveToastState();
+  saveToast = transitionSaveToastOnEdit(note.id);
+  assert.equal(saveToast.status, 'typing');
+  saveToast = transitionSaveToastOnDebounceComplete(saveToast, note.id);
+  assert.equal(saveToast.status, 'saved');
+  assert.equal(saveToast.noteId, note.id);
+  saveToast = transitionSaveToastOnReset();
+  assert.equal(saveToast.status, 'idle');
 
   // Step 3: User types a slash command '/task' at the end of a new line and applies auto-completion
   const contentWithTrigger = `${note.content}\n/task`;

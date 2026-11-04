@@ -1335,4 +1335,68 @@ export function createGoogleDemoUserProfile(
   };
 }
 
+export const SAVE_TOAST_DEBOUNCE_MS = 2000;
+export const SAVE_TOAST_VISIBLE_MS = 2600;
+
+export interface EditorSaveToastState {
+  status: 'idle' | 'typing' | 'saved';
+  noteId: string | null;
+  savedAt: string | null;
+}
+
+/**
+ * Returns the initial idle state for the editor's subtle 'Saved' notification toast.
+ */
+export function createInitialSaveToastState(): EditorSaveToastState {
+  return {
+    status: 'idle',
+    noteId: null,
+    savedAt: null,
+  };
+}
+
+/**
+ * Transitions the save toast state when the user types or edits markdown content,
+ * hiding any active toast while typing and arming the 2-second debounce window.
+ */
+export function transitionSaveToastOnEdit(noteId: string): EditorSaveToastState {
+  return {
+    status: 'typing',
+    noteId,
+    savedAt: null,
+  };
+}
+
+/**
+ * Transitions the save toast state to 'saved' once the user stops typing for 2 seconds
+ * (SAVE_TOAST_DEBOUNCE_MS), verifying the active note still matches.
+ */
+export function transitionSaveToastOnDebounceComplete(
+  currentState: EditorSaveToastState,
+  activeNoteId: string | null,
+  savedAt = new Date().toISOString()
+): EditorSaveToastState {
+  if (
+    currentState.status !== 'typing' ||
+    !activeNoteId ||
+    currentState.noteId !== activeNoteId
+  ) {
+    return currentState;
+  }
+
+  return {
+    status: 'saved',
+    noteId: activeNoteId,
+    savedAt,
+  };
+}
+
+/**
+ * Resets the save toast state back to 'idle' after auto-hide or when switching notes.
+ */
+export function transitionSaveToastOnReset(): EditorSaveToastState {
+  return createInitialSaveToastState();
+}
+
+
 

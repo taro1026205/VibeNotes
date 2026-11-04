@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Bold,
   Italic,
@@ -19,6 +19,7 @@ import {
   Columns2,
   Eye,
   History,
+  Check,
 } from 'lucide-react';
 import {
   NoteItem,
@@ -37,6 +38,13 @@ import {
   pushEditorHistory,
   undoEditorHistory,
   redoEditorHistory,
+  SAVE_TOAST_DEBOUNCE_MS,
+  SAVE_TOAST_VISIBLE_MS,
+  EditorSaveToastState,
+  createInitialSaveToastState,
+  transitionSaveToastOnEdit,
+  transitionSaveToastOnDebounceComplete,
+  transitionSaveToastOnReset,
 } from '../utils/notesLogic';
 
 export type EditorViewMode = 'edit' | 'split' | 'preview';
@@ -87,6 +95,47 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
   const [historyByNoteId, setHistoryByNoteId] = useState<
     Record<string, EditorHistoryState>
   >({});
+  const [saveToastState, setSaveToastState] = useState<EditorSaveToastState>(
+    createInitialSaveToastState
+  );
+  const saveDebounceTimerRef = useRef<number | null>(null);
+  const saveHideTimerRef = useRef<number | null>(null);
+
+  const clearSaveToastTimers = () => {
+    if (saveDebounceTimerRef.current !== null) {
+      window.clearTimeout(saveDebounceTimerRef.current);
+      saveDebounceTimerRef.current = null;
+    }
+    if (saveHideTimerRef.current !== null) {
+      window.clearTimeout(saveHideTimerRef.current);
+      saveHideTimerRef.current = null;
+    }
+  };
+
+  const scheduleSavedToast = (targetNoteId: string) => {
+    clearSaveToastTimers();
+    setSaveToastState(transitionSaveToastOnEdit(targetNoteId));
+
+    saveDebounceTimerRef.current = window.setTimeout(() => {
+      saveDebounceTimerRef.current = null;
+      setSaveToastState((prev) =>
+        transitionSaveToastOnDebounceComplete(prev, targetNoteId)
+      );
+
+      saveHideTimerRef.current = window.setTimeout(() => {
+        saveHideTimerRef.current = null;
+        setSaveToastState(transitionSaveToastOnReset());
+      }, SAVE_TOAST_VISIBLE_MS);
+    }, SAVE_TOAST_DEBOUNCE_MS);
+  };
+
+  useEffect(() => {
+    clearSaveToastTimers();
+    setSaveToastState(transitionSaveToastOnReset());
+    return () => {
+      clearSaveToastTimers();
+    };
+  }, [note?.id]);
 
   const releaseScrollLockLater = () => {
     if (scrollReleaseTimerRef.current !== null) {
@@ -209,6 +258,7 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
       };
     });
     onUpdateNote(note.id, { content: nextContent });
+    scheduleSavedToast(note.id);
   };
 
   const handleUndo = () => {
@@ -222,6 +272,7 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
       [note.id]: nextState,
     }));
     onUpdateNote(note.id, { content: restored.content });
+    scheduleSavedToast(note.id);
     setAutocompleteCtx(null);
 
     requestAnimationFrame(() => {
@@ -247,6 +298,7 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
       [note.id]: nextState,
     }));
     onUpdateNote(note.id, { content: restored.content });
+    scheduleSavedToast(note.id);
     setAutocompleteCtx(null);
 
     requestAnimationFrame(() => {
@@ -541,16 +593,35 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* Editorial Display Title (Responsive Padding & Typography on Mobile/Tablet/Desktop) */}
-      <div className="px-4 sm:px-8 lg:px-12 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b border-[var(--ink-faint)] shrink-0">
+      {/* Editorial Display Title (Responsive Padding & Typography on Mobile/Tablet/Desktop) + Top-Right 'Saved' Notification Toast */}
+      <div className="relative px-4 sm:px-8 lg:px-12 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b border-[var(--ink-faint)] shrink-0">
         <input
           type="text"
           value={note.title}
-          onChange={(e) => onUpdateNote(note.id, { title: e.target.value })}
+          onChange={(e) => {
+            onUpdateNote(note.id, { title: e.target.value });
+            scheduleSavedToast(note.id);
+          }}
           placeholder="Note Title..."
           aria-label="Note title"
-          className="w-full text-2xl sm:text-3xl lg:text-[2.6rem] leading-tight font-semibold tracking-tight bg-transparent text-[var(--ink)] placeholder:text-[var(--ink-medium)]/40 focus:outline-none font-display"
+          className="w-full pr-24 sm:pr-32 text-2xl sm:text-3xl lg:text-[2.6rem] leading-tight font-semibold tracking-tight bg-transparent text-[var(--ink)] placeholder:text-[var(--ink-medium)]/40 focus:outline-none font-display"
         />
+
+        {saveToastState.status === 'saved' &&
+          saveToastState.noteId === note.id && (
+            <div
+              role="status"
+              aria-live="polite"
+              data-testid="editor-saved-toast"
+              className="pointer-events-none absolute top-3.5 sm:top-5 right-4 sm:right-8 z-30 inline-flex items-center gap-1.5 px-2.5 py-1 bg-[var(--surface)] border border-[var(--ink)] shadow-[2px_2px_0px_var(--ink)] text-[0.6rem] font-mono uppercase tracking-[0.12em] text-[var(--ink)] transition-all duration-200"
+            >
+              <Check
+                className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0"
+                aria-hidden="true"
+              />
+              <span>Saved</span>
+            </div>
+          )}
       </div>
 
       {/* Editor & Live Markdown Preview Container:

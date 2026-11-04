@@ -35,6 +35,12 @@ import {
   validateEmailLoginInput,
   validateEmailSignUpInput,
   createGoogleDemoUserProfile,
+  SAVE_TOAST_DEBOUNCE_MS,
+  SAVE_TOAST_VISIBLE_MS,
+  createInitialSaveToastState,
+  transitionSaveToastOnEdit,
+  transitionSaveToastOnDebounceComplete,
+  transitionSaveToastOnReset,
 } from '../../src/utils/notesLogic';
 
 const mockNotes: NoteItem[] = [
@@ -392,6 +398,46 @@ test('[Unit] View-level Sign In and Sign Up (New User) validation handle email, 
   assert.equal(googleProfile.provider, 'google');
   assert.equal(googleProfile.name, 'Hoang Nguyen');
 });
+
+test('[Unit] 2-second debounced Editor Saved toast state machine transitions accurately across typing, 2000ms idle, and note switch', () => {
+  assert.equal(SAVE_TOAST_DEBOUNCE_MS, 2000);
+  assert.ok(SAVE_TOAST_VISIBLE_MS >= 2000);
+
+  let toastState = createInitialSaveToastState();
+  assert.equal(toastState.status, 'idle');
+  assert.equal(toastState.noteId, null);
+
+  // User starts typing in 'note-1' -> immediately enters 'typing' state (hides any visible toast)
+  toastState = transitionSaveToastOnEdit('note-1');
+  assert.equal(toastState.status, 'typing');
+  assert.equal(toastState.noteId, 'note-1');
+  assert.equal(toastState.savedAt, null);
+
+  // If debounce completes while a different note ('note-2') is active, it should NOT show 'saved'
+  const mismatched = transitionSaveToastOnDebounceComplete(toastState, 'note-2');
+  assert.equal(mismatched.status, 'typing');
+
+  // After 2 seconds of inactivity on 'note-1', debounce completes -> transitions to 'saved'
+  const savedTimestamp = '2026-11-04T11:20:00.000Z';
+  toastState = transitionSaveToastOnDebounceComplete(
+    toastState,
+    'note-1',
+    savedTimestamp
+  );
+  assert.equal(toastState.status, 'saved');
+  assert.equal(toastState.noteId, 'note-1');
+  assert.equal(toastState.savedAt, savedTimestamp);
+
+  // If user types again while 'Saved' toast is visible, it immediately returns to 'typing'
+  toastState = transitionSaveToastOnEdit('note-1');
+  assert.equal(toastState.status, 'typing');
+
+  // Resetting (on auto-hide or note switch) returns to 'idle'
+  toastState = transitionSaveToastOnReset();
+  assert.equal(toastState.status, 'idle');
+  assert.equal(toastState.noteId, null);
+});
+
 
 
 

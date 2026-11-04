@@ -20,11 +20,12 @@ Thư mục lưu trữ: **`/docs/DAILY_LOG.md`** (Đi kèm kế hoạch **[`PROJE
 
 ---
 
-## Ngày 2 — Xây dựng Core CRUD Ghi chú, Lưu trữ `localStorage` & Hệ thống Lịch sử Phiên bản (`Restore previous version`)
+## Ngày 2 — Xây dựng Core CRUD Ghi chú, Lưu trữ `localStorage`, Thông báo `'Saved'` (2s Debounce) & Hệ thống Lịch sử Phiên bản (`Restore previous version`)
 - **Hôm qua làm gì**: Hoàn thành khung giao diện 2 cột, cấu hình phông chữ và chế độ Sáng/Tối.
 - **Hôm nay làm gì**:
   - Cài đặt đầy đủ chức năng Thêm mới (`+ New Note`), Đọc, Sửa tiêu đề/nội dung, Ghim (`Pin`/`Pinned`) và Xoá ghi chú.
   - Kết nối tầng lưu trữ tự động vào `localStorage` (`vibenotes_workspace_notes_v1`).
+  - Xây dựng thông báo **`'Saved'`** tinh tế (`data-testid="editor-saved-toast"`, `role="status"`, `aria-live="polite"`) xuất hiện ở góc trên bên phải khung soạn thảo khi người dùng ngừng gõ **2 giây** (`SAVE_TOAST_DEBOUNCE_MS = 2000`, `EditorSaveToastState`) để xác nhận các thay đổi Markdown đã được lưu an toàn.
   - Xây dựng hệ thống lưu trữ **ngăn xếp lịch sử phiên bản cục bộ (`vibenotes_version_history_v1`)** trong `localStorage` (`recordNoteVersionSnapshot`, `restorePreviousNoteVersion`, tối đa 10 bản ghi/ghi chú) và bổ sung nút **`Restore previous version`** trên thanh điều khiển trình soạn thảo.
   - Xây dựng hộp thoại xác nhận `ConfirmDialog` trước khi xoá ghi chú để tránh mất dữ liệu ngoài ý muốn.
 - **Vướng mắc & Giải pháp**:
@@ -32,8 +33,10 @@ Thư mục lưu trữ: **`/docs/DAILY_LOG.md`** (Đi kèm kế hoạch **[`PROJE
   - *Giải pháp 1*: Tự xây dựng component `ConfirmDialog.tsx` hỗ trợ phím `Escape` và quản lý trạng thái đóng/mở bằng React state.
   - *Vướng mắc 2*: Nếu lưu vô hạn mọi phiên bản cũ của ghi chú vào `localStorage`, bộ nhớ trình duyệt có thể bị đầy.
   - *Giải pháp 2*: Giới hạn ngăn xếp ở mức `MAX_NOTE_VERSIONS = 10` bản ghi gần nhất cho mỗi ghi chú và tự động xoá lịch sử phiên bản khi ghi chú bị xoá.
+  - *Vướng mắc 3*: Nếu hiển thị thông báo `'Saved'` ở mỗi lần gõ phím hoặc giữ lại khi người dùng chuyển sang ghi chú khác sẽ gây nhấp nháy liên tục.
+  - *Giải pháp 3*: Thiết kế máy trạng thái `EditorSaveToastState` (`transitionSaveToastOnEdit`, `transitionSaveToastOnDebounceComplete`, `transitionSaveToastOnReset`) với bộ đếm debounce `2000ms` chỉ kích hoạt khi ngừng gõ đủ 2 giây và tự động reset khi chuyển ghi chú.
 - **Commit tiêu biểu**:
-  - `feat(notes): implement full note CRUD, localStorage version history stack, and Restore previous version action`
+  - `feat(notes): implement full note CRUD, 2-second debounced Saved toast, localStorage version history stack, and Restore previous version action`
 
 ---
 
@@ -114,11 +117,11 @@ Thư mục lưu trữ: **`/docs/DAILY_LOG.md`** (Đi kèm kế hoạch **[`PROJE
 ## Ngày 7 — Kiểm thử Tự động (`/tests`) & Đóng gói Tài liệu Tiến độ (`/docs`)
 - **Hôm qua làm gì**: Hoàn thiện màn hình đăng nhập/đăng ký kiểu Notion, ngăn kéo đồng bộ Google Keep và nâng cấp trải nghiệm Responsive trên Mobile/Tablet.
 - **Hôm nay làm gì**:
-  - Tổ chức thư mục `/tests` gồm **10 Unit Test Suites** (`tests/unit/notesLogic.unit.test.ts`), **4 Integration Test Suites** (`tests/integration/workspaceFlow.integration.test.ts`) — tổng cộng **14/14 test suites tự động** — và tài liệu **13 kịch bản kiểm thử thủ công** (`tests/MANUAL_TEST_CASES.md`).
+  - Tổ chức thư mục `/tests` gồm **11 Unit Test Suites** (`tests/unit/notesLogic.unit.test.ts`), **4 Integration Test Suites** (`tests/integration/workspaceFlow.integration.test.ts`) — tổng cộng **15/15 test suites tự động** — và tài liệu **14 kịch bản kiểm thử thủ công** (`tests/MANUAL_TEST_CASES.md`, từ `TC-01` đến `TC-14`).
   - Đóng gói toàn bộ file ghi log và kế hoạch tiến độ vào thư mục riêng **`/docs`** (`docs/DAILY_LOG.md`, `docs/PROJECT_PLAN_WBS.md`, `docs/PROJECT_PLAN_WBS.csv`) và đồng bộ 100% `README.md`, `DECISIONS.md`, `MANUAL_TEST_CASES.md` theo code mới nhất.
 - **Vướng mắc & Giải pháp**:
   - *Vướng mắc*: Khi hiển thị 10 phím tắt trong `ShortcutsModal` theo 1 cột dọc trên Desktop, mục cuối cùng dễ bị khuất nhẹ ở mép dưới.
-  - *Giải pháp*: Chuyển nội dung `ShortcutsModal` sang lưới 2 cột (`md:grid-cols-2`) trên màn hình Desktop để hiển thị trọn vẹn cả 10 phím tắt cùng lúc; toàn bộ **14/14 test suites** trong `/tests` và `npm run build` đều đạt PASS 100%.
+  - *Giải pháp*: Chuyển nội dung `ShortcutsModal` sang lưới 2 cột (`md:grid-cols-2`) trên màn hình Desktop để hiển thị trọn vẹn cả 10 phím tắt cùng lúc; toàn bộ **15/15 test suites** trong `/tests` và `npm run build` đều đạt PASS 100%.
 - **Commit tiêu biểu**:
-  - `test(suite): add 14 unit/integration test suites in /tests and synchronize all project docs in /docs, README, and DECISIONS`
+  - `test(suite): add 15 unit/integration test suites in /tests and synchronize all project docs in /docs, README, and DECISIONS`
 
