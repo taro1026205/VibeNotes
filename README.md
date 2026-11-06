@@ -155,6 +155,8 @@ classDiagram
         +restorePreviousNoteVersion(historyMap, noteId) NoteVersionSnapshot
         +transitionSaveToastOnEdit(state) EditorSaveToastState
         +transitionSaveToastOnDebounceComplete(state, savedAtIso) EditorSaveToastState
+        +initializeAccountNotesOnAuth(accountNotesMap, profile) NoteItem[]
+        +getNotesForAccount(accountNotesMap, profile) NoteItem[]
         +validateEmailLoginInput(email, password, customName, registeredUsers) EmailLoginValidationResult
         +validateEmailSignUpInput(fullName, email, password, confirmPassword, registeredUsers) EmailSignUpValidationResult
         +computeSyncedScrollTop(srcTop, srcH, srcClientH, tgtH, tgtClientH) number
@@ -165,7 +167,7 @@ classDiagram
 
     NoteItem "*" --> "1" NoteTag : phân loại theo (tag -> id)
     NoteItem "1" --> "*" NoteVersionSnapshot : lưu lịch sử phiên bản (localStorage)
-    WorkspaceEngine ..> NoteItem : xử lý & lưu localStorage
+    WorkspaceEngine ..> NoteItem : xử lý & lưu localStorage theo từng Account
     WorkspaceEngine ..> NoteTag : quản lý Filter
     WorkspaceEngine ..> NoteSortMetadata : sắp xếp theo Date Modified / Title / Pinned
     WorkspaceEngine ..> WorkspaceUserProfile : quản lý Sign In / Sign Up / Sign Out
@@ -184,7 +186,7 @@ classDiagram
 | :--- | :--- | :--- | :--- |
 | **Quản lý Ghi chú (CRUD)** | Thêm, xem, sửa, xoá (có xác nhận), ghim ghi chú ưu tiên lên đầu. | Hoạt động ổn định, phản hồi tức thì, hỗ trợ cả nút bấm lẫn phím tắt (`Cmd/Ctrl + N`, `Cmd/Ctrl + P`) và modal xác nhận xoá. | **Hoàn thành 100%** |
 | **Lưu trữ Cục bộ, Thông báo `'Saved'` & Lịch sử Phiên bản (`localStorage`)** | Tự động lưu ghi chú, filter, chế độ sắp xếp, theme, hiển thị thông báo `'Saved'` sau 2 giây ngừng gõ và lưu ngăn xếp các phiên bản nội dung trước đó. | Tự động lưu với độ trễ `0ms`, hiển thị toast **`'Saved'`** tinh tế ở góc trên bên phải khung soạn thảo sau 2 giây ngừng gõ (`SAVE_TOAST_DEBOUNCE_MS = 2000ms`), kèm ngăn xếp `vibenotes_version_history_v1` (tối đa 10 bản/ghi chú) và nút **`Restore previous version`**. | **Hoàn thành 100%** |
-| **Màn hình Đăng nhập / Đăng ký kiểu Notion (`LoginView`)** | Hỗ trợ `Sign In`, `Sign Up (New User)` và `Google Account` ở mức View, hiển thị tên User ở góc trái kèm nút `Sign Out` (100% tiếng Anh). | Giao diện Notion-style hỗ trợ đăng ký tài khoản mới (`vibenotes_registered_users_v1`), đăng nhập Email/Google, hiển thị tên User ở góc trái Sidebar & Footer, click mở menu **`Sign Out`**. | **Hoàn thành 100%** |
+| **Màn hình Đăng nhập / Đăng ký kiểu Notion (`LoginView`) & Cô lập Dữ liệu theo Tài khoản** | Hỗ trợ `Sign In`, `Sign Up (New User)` và `Google Account` ở mức View, hiển thị tên User ở góc trái kèm nút `Sign Out`; tài khoản mới vào có `0` ghi chú (`[]`). | Giao diện Notion-style hỗ trợ đăng ký tài khoản mới (`vibenotes_registered_users_v1`), cô lập ghi chú theo từng tài khoản (`vibenotes_account_notes_v2` — tài khoản mới bắt đầu hoàn toàn trống `0 notes`), hiển thị tên User ở góc trái kèm menu **`Sign Out`**. | **Hoàn thành 100%** |
 | **Trình soạn thảo Markdown & Undo/Redo** | Hỗ trợ Markdown, thanh công cụ nổi, gợi ý cú pháp tự động (`/`, `#`, `-`, `>`), Undo/Redo. | Đầy đủ Floating Toolbar, Auto-complete theo con trỏ, Undo/Redo bằng nút bấm & phím tắt (`⌘Z`/`Ctrl+Z`, `⌘⇧Z`/`Ctrl+Y`). | **Hoàn thành 100%** |
 | **Bảng Tra cứu Phím tắt (`ShortcutsModal`)** | Có hộp thoại `Info` hiển thị bảng Cheat-Sheet phím tắt trực quan. | Hộp thoại `Keyboard Shortcuts Cheat-Sheet` 2 cột (`Cmd/Ctrl + /` hoặc nút `Shortcuts`), hỗ trợ đầy đủ 10 phím tắt toàn cục & trình soạn thảo. | **Hoàn thành 100%** |
 | **Chế độ Xem & Đồng bộ Cuộn** | Chuyển đổi `Edit` / `Split` / `Preview` (`Cmd/Ctrl + E`), cuộn bên nào bên kia tự cuộn theo. | Đồng bộ cuộn hai chiều theo tỷ lệ phần trăm kèm khoá chống lặp sự kiện (`Anti-bounce Lock`). | **Hoàn thành 100%** |
@@ -224,14 +226,14 @@ Trong quá trình phát triển dự án trong 1 tuần, 4 rủi ro kỹ thuật
 
 ### 5.1. Tự Đánh giá Ngắn
 - **Điểm mạnh**:
-  - **Kiến trúc tách biệt & Kiểm thử đầy đủ**: Toàn bộ logic cốt lõi (đăng nhập `Sign In` / đăng ký `Sign Up` mức View kèm validation, sắp xếp ghi chú theo `Date Modified` / `Title` / `Pinned`, tìm kiếm đa trường, lọc, thống kê từ, chèn Markdown, gợi ý cú pháp, ngăn xếp Undo/Redo, ngăn xếp lịch sử phiên bản `localStorage`, máy trạng thái thông báo `'Saved'` sau 2 giây ngừng gõ `EditorSaveToastState`, tính toán vị trí cuộn đồng bộ, chuẩn hoá tên file PDF, phân giải phím tắt toàn cục) được tách thành pure functions trong `src/utils/notesLogic.ts` và được kiểm thử tự động trong thư mục **`/tests`** (**15/15** test suites gồm **11 Unit Tests**, **4 Integration Tests** và tài liệu **14 Manual Test Cases**).
+  - **Kiến trúc tách biệt & Kiểm thử đầy đủ**: Toàn bộ logic cốt lõi (đăng nhập `Sign In` / đăng ký `Sign Up` mức View kèm validation, cô lập dữ liệu ghi chú theo từng tài khoản giúp tài khoản mới luôn bắt đầu với `0` ghi chú, sắp xếp ghi chú theo `Date Modified` / `Title` / `Pinned`, tìm kiếm đa trường, lọc, thống kê từ, chèn Markdown, gợi ý cú pháp, ngăn xếp Undo/Redo, ngăn xếp lịch sử phiên bản `localStorage`, máy trạng thái thông báo `'Saved'` sau 2 giây ngừng gõ `EditorSaveToastState`, tính toán vị trí cuộn đồng bộ, chuẩn hoá tên file PDF, phân giải phím tắt toàn cục) được tách thành pure functions trong `src/utils/notesLogic.ts` và được kiểm thử tự động trong thư mục **`/tests`** (**16/16** test suites gồm **12 Unit Tests**, **4 Integration Tests** và tài liệu **14 Manual Test Cases**).
   - **Trải nghiệm UX/UI nhất quán (100% English UI) trên cả Desktop, Tablet & Mobile**: Thiết kế phong cách Editorial kết hợp bố cục linh hoạt kiểu Notion, màn hình **Login / Sign Up (`LoginView.tsx` qua Email / Google Account)** hiển thị rõ tên User ở góc trái màn hình kèm menu **`Sign Out`**, thông báo **`'Saved'`** tinh tế ở góc trên bên phải khung soạn thảo sau 2 giây ngừng gõ (`data-testid="editor-saved-toast"`), dropdown sắp xếp **`Sort By` (`Date Modified`, `Title`, `Pinned`)** trên Sidebar, hộp thoại **Keyboard Shortcuts Cheat-Sheet (`ShortcutsModal`)**, nút **`Restore previous version`** và đồng bộ cuộn hai chiều mượt mà ở chế độ Split.
 - **Điểm yếu**:
   - Dung lượng lưu trữ của `localStorage` giới hạn ở mức khoảng `5MB`, nên ngăn xếp phiên bản hiện giới hạn tối đa `10` bản ghi gần nhất cho mỗi ghi chú (`MAX_NOTE_VERSIONS = 10`), và hệ thống đăng nhập/đăng ký hiện đang ở mức View/Client-side (`vibenotes_user_profile_v1`, `vibenotes_registered_users_v1`) chưa kết nối cơ sở dữ liệu tài khoản đám mây.
   - Đồng bộ cuộn hai chiều hiện tính theo tỷ lệ phần trăm chiều cao tổng thể (`scrollTop / maxScroll`), có thể lệch nhẹ vài dòng nếu ghi chú chứa một bảng hoặc khối mã quá dài ở một phía.
 
 ### 5.2. Bài học Kinh nghiệm (Lessons Learned)
-1. **Tách Pure Logic trước khi làm UI**: Việc viết và kiểm thử các hàm xử lý văn bản, bộ lọc, sắp xếp đa chế độ (`sortNotesByOption`), ngăn xếp Undo/Redo, lịch sử phiên bản `localStorage`, máy trạng thái thông báo `'Saved'` (`transitionSaveToastOnEdit`, `transitionSaveToastOnDebounceComplete`), xác thực đăng nhập/đăng ký và phân giải phím tắt trong `notesLogic.ts` giúp phát hiện sớm các trường hợp biên (như xoá ghi chú thì tự động dọn sạch lịch sử phiên bản của ghi chú đó, chuyển sang ghi chú khác thì tự động huỷ hẹn giờ `'Saved'` đang chờ, hoặc sắp xếp theo `Title` không phân biệt hoa thường và nhận diện số tự nhiên).
+1. **Tách Pure Logic trước khi làm UI**: Việc viết và kiểm thử các hàm xử lý văn bản, bộ lọc, sắp xếp đa chế độ (`sortNotesByOption`), ngăn xếp Undo/Redo, lịch sử phiên bản `localStorage`, máy trạng thái thông báo `'Saved'` (`transitionSaveToastOnEdit`, `transitionSaveToastOnDebounceComplete`), cô lập ghi chú theo tài khoản (`initializeAccountNotesOnAuth`, `getNotesForAccount`) và phân giải phím tắt trong `notesLogic.ts` giúp phát hiện sớm các trường hợp biên (như tài khoản mới tạo phải bắt đầu với `0` ghi chú thay vì bị dính dữ liệu mẫu của tài khoản trước, hoặc chuyển sang ghi chú khác thì tự động huỷ hẹn giờ `'Saved'` đang chờ).
 2. **Thiết kế Responsive ưu tiên cảm ứng (Touch-First Adaptation)**: Trên thiết bị di động, việc ẩn các nút thao tác sau `hover` hoặc để thanh công cụ tự xuống dòng sẽ làm giảm mạnh diện tích soạn thảo; sử dụng ngăn kéo trượt và thanh công cụ vuốt ngang 1 hàng giúp giữ trọn không gian viết.
 
 ### 5.3. Hướng Phát triển Tiếp theo nếu có thêm 1 tuần (Future Work)
@@ -242,19 +244,33 @@ Nếu có thêm **1 tuần** phát triển, dự án sẽ ưu tiên nâng cấp 
 
 ---
 
-## 6. Cấu trúc Tài liệu, Tiến độ (`/docs`) & Kiểm thử (`/tests`)
+## 6. Hệ thống Tài liệu Dự án (Chia theo 4 Phần Chuẩn)
 
-Toàn bộ tài liệu kiến trúc, bảng phân rã công việc (WBS), nhật ký tiến độ hàng ngày và bộ kiểm thử được đóng gói gọn gàng theo cấu trúc sau:
+Toàn bộ tài liệu của dự án được tổ chức thành **4 phần rõ ràng** (vẫn giữ nguyên `README.md`, `DECISIONS.md` và các tài liệu tiến độ/kiểm thử hiện có):
 
-- **[`DECISIONS.md`](DECISIONS.md)**: Tài liệu quyết định kiến trúc & lựa chọn công nghệ (ADR).
-- **Thư mục [`/docs`](docs/)**: Đóng gói toàn bộ file ghi log và kế hoạch tiến độ dự án:
-  - **[`docs/PROJECT_PLAN_WBS.md`](docs/PROJECT_PLAN_WBS.md)**: Bảng phân rã công việc (WBS), mốc thời gian 7 ngày và Định nghĩa hoàn thành (Definition of Done - DoD).
-  - **[`docs/PROJECT_PLAN_WBS.csv`](docs/PROJECT_PLAN_WBS.csv)**: File CSV tiến độ.
-  - **[`docs/DAILY_LOG.md`](docs/DAILY_LOG.md)**: Nhật ký công việc hàng ngày (Daily Standup Log: hôm qua làm gì, hôm nay làm gì, vướng mắc & hướng xử lý, kèm commit message).
-- **Thư mục [`/tests`](tests/)**: Bộ kiểm thử tự động & thủ công:
-  - **[`tests/unit/notesLogic.unit.test.ts`](tests/unit/notesLogic.unit.test.ts)**: 11 Unit Test Suites cho các hàm xử lý logic chính.
-  - **[`tests/integration/workspaceFlow.integration.test.ts`](tests/integration/workspaceFlow.integration.test.ts)**: 4 Integration Test Suites kiểm tra luồng nghiệp vụ đầu-cuối.
-  - **[`tests/MANUAL_TEST_CASES.md`](tests/MANUAL_TEST_CASES.md)**: Bảng 14 kịch bản kiểm thử thủ công (`TC-01` $\rightarrow$ `TC-14`).
+1. **Phần 1 — Tài liệu Tổng quan Dự án & Quản lý Tiến độ (Project Overview & WBS Plan)**:
+   - **[`README.md`](README.md)**: Đặt vấn đề thực tế, phạm vi MVP, đối chiếu mục tiêu – kết quả, quản trị rủi ro và tự đánh giá.
+   - **[`docs/PROJECT_PLAN_WBS.md`](docs/PROJECT_PLAN_WBS.md)** & **[`docs/PROJECT_PLAN_WBS.csv`](docs/PROJECT_PLAN_WBS.csv)**: Bảng phân rã công việc (WBS 7 ngày) và Định nghĩa hoàn thành (DoD).
+   - **[`docs/DAILY_LOG.md`](docs/DAILY_LOG.md)**: Nhật ký công việc hàng ngày (Daily Standup Log & Commit History).
+2. **Phần 2 — Tài liệu Kỹ thuật & Kiến trúc Hệ thống (Technical & Architecture Documentation)**:
+   - **[`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md)**: Sơ đồ kiến trúc tổng quan (High-Level Architecture), sơ đồ Use Case, mô hình cơ sở dữ liệu & quan hệ thực thể (ERD), sơ đồ lớp (Class Diagram), đặc tả lược đồ `localStorage` theo từng tài khoản, sơ đồ tuần tự (Sequence Diagrams) và máy trạng thái (`EditorSaveToastState` 2s debounce).
+   - **[`DECISIONS.md`](DECISIONS.md)**: Hồ sơ các quyết định lựa chọn công nghệ và kiến trúc (ADR).
+3. **Phần 3 — Tài liệu Hướng dẫn Sử dụng & Quản trị (User Manual & Admin Guide)**:
+   - **[`docs/USER_MANUAL_ADMIN_GUIDE.md`](docs/USER_MANUAL_ADMIN_GUIDE.md)**:
+     - **User Manual**: Hướng dẫn chi tiết cách đăng ký tài khoản mới (`0 notes`), đăng nhập/đăng xuất, soạn thảo Markdown, dùng thanh công cụ nổi, Auto-complete (`/`), khôi phục phiên bản cũ (`Restore previous version`), nhận biết thông báo `'Saved'` sau 2 giây ngừng gõ, sắp xếp (`Date Modified / Title / Pinned`), lọc, tìm kiếm và xuất PDF/MD.
+     - **Admin & Deployment Guide**: Hướng dẫn cài đặt môi trường, cấu hình `.env.example` / Firebase, quản trị khoá `localStorage`, chạy bộ kiểm thử tự động, hướng dẫn deploy miễn phí (Vercel / Netlify) và xử lý sự cố (Troubleshooting).
+4. **Phần 4 — Tài liệu Kiểm thử & Đảm bảo Chất lượng (Testing & QA Documentation)**:
+   - **[`tests/MANUAL_TEST_CASES.md`](tests/MANUAL_TEST_CASES.md)**: Bảng 14 kịch bản kiểm thử thủ công (`TC-01` $\rightarrow$ `TC-14`).
+   - **[`tests/unit/notesLogic.unit.test.ts`](tests/unit/notesLogic.unit.test.ts)**: 12 Unit Test Suites kiểm thử các hàm logic thuần túy.
+   - **[`tests/integration/workspaceFlow.integration.test.ts`](tests/integration/workspaceFlow.integration.test.ts)**: 4 Integration Test Suites kiểm thử luồng nghiệp vụ đầu-cuối.
+
+### Thông tin Truy cập & Mật khẩu Chấm bài (Credentials & Access Control)
+
+| Vai trò / Loại Tài khoản | Email Đăng nhập (Tab `Sign In`) | Mật khẩu | Dữ liệu Khởi tạo | Ghi chú cho Giảng viên |
+| :--- | :--- | :--- | :--- | :--- |
+| **Tài khoản Demo (Có sẵn dữ liệu mẫu)** | `demo@vibenotes.io` | `demo1234` | **4 ghi chú Markdown mẫu** | Dùng để chấm nhanh các tính năng Tìm kiếm, Sắp xếp, Split View, Xuất PDF. |
+| **Tài khoản Mới (Trống 0 ghi chú)** | `student@vibenotes.io` | `student1234` | **`0` ghi chú (`[]`)** | Hoặc tự tạo tài khoản mới bất kỳ tại tab **`Sign Up (New User)`** (luôn bắt đầu với `0` ghi chú). |
+| **Truy cập Nhanh (Google / Guest)** | Nhấn `Continue with Google Account` / `Continue as Guest` | *Không cần* | **`0` ghi chú (`[]`)** | Vào thẳng Workspace chỉ với 1 cú nhấp chuột. |
 
 ### Lệnh Chạy Dự án & Kiểm thử
 
@@ -265,7 +281,7 @@ npm install
 # 2. Chạy ứng dụng ở môi trường phát triển (Port 3000)
 npm run dev
 
-# 3. Chạy toàn bộ bộ kiểm thử tự động (15/15 Unit & Integration Tests trong thư mục /tests)
+# 3. Chạy toàn bộ bộ kiểm thử tự động (16/16 Unit & Integration Tests trong thư mục /tests)
 npm test
 
 # 4. Kiểm tra biên dịch TypeScript & Build Production

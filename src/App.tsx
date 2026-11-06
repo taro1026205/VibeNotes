@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { PanelLeft, Sun, Moon, Info, LogOut, ChevronUp } from 'lucide-react';
 import {
-  INITIAL_NOTES,
   TAG_CATEGORIES,
   NoteItem,
   NoteTag,
@@ -24,6 +23,11 @@ import {
   WorkspaceUserProfile,
   RegisteredWorkspaceAccount,
   createGoogleDemoUserProfile,
+  AccountNotesMap,
+  normalizeAccountStorageKey,
+  getNotesForAccount,
+  initializeAccountNotesOnAuth,
+  mergeDefaultRegisteredAccounts,
 } from './utils/notesLogic';
 import { exportNoteToPdf } from './utils/pdfExport';
 import { initAuth, googleSignIn, logout } from './services/keepService';
@@ -34,76 +38,16 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { LoginView } from './components/LoginView';
 
-const STORAGE_KEY = 'vibenotes_workspace_notes_v1';
-const FILTERS_STORAGE_KEY = 'vibenotes_custom_filters_v1';
-const VERSION_HISTORY_STORAGE_KEY = 'vibenotes_version_history_v1';
+const ACCOUNT_NOTES_STORAGE_KEY = 'vibenotes_account_notes_v2';
+const ACCOUNT_FILTERS_STORAGE_KEY = 'vibenotes_account_filters_v2';
+const ACCOUNT_VERSION_HISTORY_STORAGE_KEY = 'vibenotes_account_version_history_v2';
 const USER_PROFILE_STORAGE_KEY = 'vibenotes_user_profile_v1';
 const REGISTERED_USERS_STORAGE_KEY = 'vibenotes_registered_users_v1';
 const SORT_BY_STORAGE_KEY = 'vibenotes_sort_by_v1';
 const THEME_KEY = 'vibenotes_theme_v2';
 
 export default function App() {
-  // 1. Notes state persisted to localStorage
-  const [notes, setNotes] = useState<NoteItem[]>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load notes from localStorage:', e);
-    }
-    return INITIAL_NOTES;
-  });
-
-  // 2. Filters / Categories state (default + user-created custom filters; all deletable except 'All')
-  const [allFilters, setAllFilters] = useState<NoteTag[]>(() => {
-    try {
-      const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
-      if (raw !== null) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load custom filters from localStorage:', e);
-    }
-    return TAG_CATEGORIES;
-  });
-
-  // 2b. Local Note Version History stack persisted to localStorage
-  const [versionHistory, setVersionHistory] = useState<NoteVersionHistoryMap>(() => {
-    try {
-      const raw = localStorage.getItem(VERSION_HISTORY_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load version history from localStorage:', e);
-    }
-    return {};
-  });
-
-  // 3. Theme state (Variation 2 warm paper light mode by default, with full dark mode toggle)
-  const [isDark, setIsDark] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem(THEME_KEY);
-      if (saved === 'dark') return true;
-      if (saved === 'light') return false;
-    } catch {
-      // ignore
-    }
-    return false;
-  });
-
-  // 3b. View-level User Profile state (persisted to localStorage; supports ?autostart=1 bypass)
+  // 1. View-level User Profile state (persisted to localStorage; supports ?autostart=1 bypass)
   const [userProfile, setUserProfile] = useState<WorkspaceUserProfile | null>(() => {
     try {
       const raw = localStorage.getItem(USER_PROFILE_STORAGE_KEY);
@@ -125,6 +69,142 @@ export default function App() {
     return null;
   });
 
+  // 2. Per-account Notes map persisted to localStorage (new accounts always start with 0 notes: [])
+  const [accountNotesMap, setAccountNotesMap] = useState<AccountNotesMap>(() => {
+    try {
+      const raw = localStorage.getItem(ACCOUNT_NOTES_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load account notes from localStorage:', e);
+    }
+    return {};
+  });
+
+  // 3. Per-account Filters / Categories state
+  const [accountFiltersMap, setAccountFiltersMap] = useState<
+    Record<string, NoteTag[]>
+  >(() => {
+    try {
+      const raw = localStorage.getItem(ACCOUNT_FILTERS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load account filters from localStorage:', e);
+    }
+    return {};
+  });
+
+  // 4. Per-account Local Note Version History stack
+  const [accountVersionHistoryMap, setAccountVersionHistoryMap] = useState<
+    Record<string, NoteVersionHistoryMap>
+  >(() => {
+    try {
+      const raw = localStorage.getItem(ACCOUNT_VERSION_HISTORY_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load account version history from localStorage:', e);
+    }
+    return {};
+  });
+
+  const activeAccountKey = useMemo(
+    () => (userProfile ? normalizeAccountStorageKey(userProfile.email) : null),
+    [userProfile]
+  );
+
+  const notes = useMemo(
+    () => getNotesForAccount(accountNotesMap, userProfile),
+    [accountNotesMap, userProfile]
+  );
+
+  const allFilters = useMemo(() => {
+    if (!activeAccountKey) return TAG_CATEGORIES;
+    const saved = accountFiltersMap[activeAccountKey];
+    return Array.isArray(saved) ? saved : TAG_CATEGORIES;
+  }, [accountFiltersMap, activeAccountKey]);
+
+  const versionHistory = useMemo(() => {
+    if (!activeAccountKey) return {};
+    return accountVersionHistoryMap[activeAccountKey] || {};
+  }, [accountVersionHistoryMap, activeAccountKey]);
+
+  const setNotes = (
+    updater: NoteItem[] | ((prev: NoteItem[]) => NoteItem[])
+  ) => {
+    if (!activeAccountKey) return;
+    setAccountNotesMap((prevMap) => {
+      const currentNotes = Array.isArray(prevMap[activeAccountKey])
+        ? prevMap[activeAccountKey]
+        : [];
+      const nextNotes =
+        typeof updater === 'function' ? updater(currentNotes) : updater;
+      return {
+        ...prevMap,
+        [activeAccountKey]: nextNotes,
+      };
+    });
+  };
+
+  const setAllFilters = (
+    updater: NoteTag[] | ((prev: NoteTag[]) => NoteTag[])
+  ) => {
+    if (!activeAccountKey) return;
+    setAccountFiltersMap((prevMap) => {
+      const currentFilters = Array.isArray(prevMap[activeAccountKey])
+        ? prevMap[activeAccountKey]
+        : TAG_CATEGORIES;
+      const nextFilters =
+        typeof updater === 'function' ? updater(currentFilters) : updater;
+      return {
+        ...prevMap,
+        [activeAccountKey]: nextFilters,
+      };
+    });
+  };
+
+  const setVersionHistory = (
+    updater:
+      | NoteVersionHistoryMap
+      | ((prev: NoteVersionHistoryMap) => NoteVersionHistoryMap)
+  ) => {
+    if (!activeAccountKey) return;
+    setAccountVersionHistoryMap((prevMap) => {
+      const currentHistory = prevMap[activeAccountKey] || {};
+      const nextHistory =
+        typeof updater === 'function' ? updater(currentHistory) : updater;
+      return {
+        ...prevMap,
+        [activeAccountKey]: nextHistory,
+      };
+    });
+  };
+
+  // 5. Theme state (Variation 2 warm paper light mode by default, with full dark mode toggle)
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved === 'dark') return true;
+      if (saved === 'light') return false;
+    } catch {
+      // ignore
+    }
+    return false;
+  });
+
   const [registeredAccounts, setRegisteredAccounts] = useState<
     RegisteredWorkspaceAccount[]
   >(() => {
@@ -133,16 +213,22 @@ export default function App() {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          return parsed;
+          return mergeDefaultRegisteredAccounts(parsed);
         }
       }
     } catch (e) {
       console.error('Failed to load registered accounts from localStorage:', e);
     }
-    return [];
+    return mergeDefaultRegisteredAccounts([]);
   });
 
   const [isFooterUserMenuOpen, setIsFooterUserMenuOpen] = useState(false);
+
+  // 6. Active Note, Search, Filter, Sort, View Mode & Responsive Sidebar Drawer State
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(() => {
+    const initialNotes = getNotesForAccount(accountNotesMap, userProfile);
+    return initialNotes.length > 0 ? initialNotes[0].id : null;
+  });
 
   const handleRegisterAccounts = (updatedAccounts: RegisteredWorkspaceAccount[]) => {
     setRegisteredAccounts(updatedAccounts);
@@ -157,10 +243,33 @@ export default function App() {
   };
 
   const handleLoginSuccess = (profile: WorkspaceUserProfile) => {
+    const { updatedAccountNotesMap, accountNotes } =
+      initializeAccountNotesOnAuth(accountNotesMap, profile);
+    const accountKey = normalizeAccountStorageKey(profile.email);
+
+    setAccountNotesMap(updatedAccountNotesMap);
+    if (profile.isNewUser) {
+      setAccountFiltersMap((prev) => ({
+        ...prev,
+        [accountKey]: TAG_CATEGORIES,
+      }));
+      setAccountVersionHistoryMap((prev) => ({
+        ...prev,
+        [accountKey]: {},
+      }));
+    }
+
     setUserProfile(profile);
+    setActiveNoteId(accountNotes.length > 0 ? accountNotes[0].id : null);
+    setSearchQuery('');
+    setSelectedTag('all');
     setIsFooterUserMenuOpen(false);
     try {
       localStorage.setItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(profile));
+      localStorage.setItem(
+        ACCOUNT_NOTES_STORAGE_KEY,
+        JSON.stringify(updatedAccountNotesMap)
+      );
     } catch (e) {
       console.error('Failed to save user profile to localStorage:', e);
     }
@@ -169,6 +278,9 @@ export default function App() {
   const handleSignOutUser = () => {
     setIsFooterUserMenuOpen(false);
     setUserProfile(null);
+    setActiveNoteId(null);
+    setSearchQuery('');
+    setSelectedTag('all');
     try {
       localStorage.removeItem(USER_PROFILE_STORAGE_KEY);
     } catch (e) {
@@ -190,40 +302,41 @@ export default function App() {
     }
   }, [isDark]);
 
-  // Persist notes to localStorage whenever they change
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-    } catch (e) {
-      console.error('Failed to save notes to localStorage:', e);
-    }
-  }, [notes]);
-
-  // Persist filters to localStorage whenever they change
-  useEffect(() => {
-    try {
-      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(allFilters));
-    } catch (e) {
-      console.error('Failed to save filters to localStorage:', e);
-    }
-  }, [allFilters]);
-
-  // Persist note version history stack to localStorage whenever it changes
+  // Persist per-account notes map to localStorage whenever it changes
   useEffect(() => {
     try {
       localStorage.setItem(
-        VERSION_HISTORY_STORAGE_KEY,
-        JSON.stringify(versionHistory)
+        ACCOUNT_NOTES_STORAGE_KEY,
+        JSON.stringify(accountNotesMap)
       );
     } catch (e) {
-      console.error('Failed to save version history to localStorage:', e);
+      console.error('Failed to save account notes to localStorage:', e);
     }
-  }, [versionHistory]);
+  }, [accountNotesMap]);
 
-  // 4. Active Note, Search, Filter, Sort, View Mode & Responsive Sidebar Drawer State
-  const [activeNoteId, setActiveNoteId] = useState<string | null>(() =>
-    notes.length > 0 ? notes[0].id : null
-  );
+  // Persist per-account filters map to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        ACCOUNT_FILTERS_STORAGE_KEY,
+        JSON.stringify(accountFiltersMap)
+      );
+    } catch (e) {
+      console.error('Failed to save account filters to localStorage:', e);
+    }
+  }, [accountFiltersMap]);
+
+  // Persist per-account note version history map to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        ACCOUNT_VERSION_HISTORY_STORAGE_KEY,
+        JSON.stringify(accountVersionHistoryMap)
+      );
+    } catch (e) {
+      console.error('Failed to save account version history to localStorage:', e);
+    }
+  }, [accountVersionHistoryMap]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<TagColor | 'all'>('all');
   const [sortBy, setSortBy] = useState<NoteSortOption>(() => {
@@ -769,13 +882,12 @@ export default function App() {
           </span>
         </div>
         <div className="editorial-label !text-[0.58rem] sm:!text-[0.65rem]">
-          Saved · Updated{' '}
           {activeNote
-            ? new Date(activeNote.updatedAt).toLocaleTimeString([], {
+            ? `Saved · Updated ${new Date(activeNote.updatedAt).toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
-              })
-            : 'Just now'}
+              })}`
+            : `Workspace Ready · ${notes.length} Notes`}
         </div>
       </footer>
 

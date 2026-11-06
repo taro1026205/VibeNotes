@@ -1398,5 +1398,113 @@ export function transitionSaveToastOnReset(): EditorSaveToastState {
   return createInitialSaveToastState();
 }
 
+export type AccountNotesMap = Record<string, NoteItem[]>;
 
+export const DEMO_WORKSPACE_EMAIL = 'demo@vibenotes.io';
 
+export const DEFAULT_REGISTERED_ACCOUNTS: RegisteredWorkspaceAccount[] = [
+  {
+    name: 'Demo Evaluator',
+    email: DEMO_WORKSPACE_EMAIL,
+    password: 'demo1234',
+    createdAt: '2026-10-20T08:00:00.000Z',
+  },
+  {
+    name: 'Fresh Student Account',
+    email: 'student@vibenotes.io',
+    password: 'student1234',
+    createdAt: '2026-11-01T08:00:00.000Z',
+  },
+];
+
+/**
+ * Merges saved localStorage accounts with DEFAULT_REGISTERED_ACCOUNTS so the teacher's
+ * demo credentials (demo@vibenotes.io / demo1234 and student@vibenotes.io / student1234)
+ * always work out-of-the-box on any browser.
+ */
+export function mergeDefaultRegisteredAccounts(
+  storedAccounts: RegisteredWorkspaceAccount[] = []
+): RegisteredWorkspaceAccount[] {
+  const merged = [...storedAccounts];
+  for (const preset of DEFAULT_REGISTERED_ACCOUNTS) {
+    const exists = merged.some(
+      (acc) => acc.email.trim().toLowerCase() === preset.email.toLowerCase()
+    );
+    if (!exists) {
+      merged.push(preset);
+    }
+  }
+  return merged;
+}
+
+/**
+ * Normalizes a user email into a consistent localStorage account key.
+ */
+export function normalizeAccountStorageKey(email?: string | null): string {
+  const normalized = (email || '').trim().toLowerCase();
+  return normalized || 'anonymous';
+}
+
+/**
+ * Returns the saved notes array for the given user profile.
+ * - Any new account (or any account other than the pre-seeded teacher demo account) starts with [] (0 notes).
+ * - Only the dedicated evaluator demo account ('demo@vibenotes.io') is pre-seeded with INITIAL_NOTES if not yet modified.
+ */
+export function getNotesForAccount(
+  accountNotesMap: AccountNotesMap,
+  profile: Pick<WorkspaceUserProfile, 'email' | 'isNewUser'> | null
+): NoteItem[] {
+  if (!profile) return [];
+  const key = normalizeAccountStorageKey(profile.email);
+  const stored = accountNotesMap[key];
+  if (Array.isArray(stored)) {
+    return stored;
+  }
+  if (!profile.isNewUser && key === DEMO_WORKSPACE_EMAIL) {
+    return INITIAL_NOTES;
+  }
+  return [];
+}
+
+/**
+ * Initializes or retrieves the notes list for an authenticated account.
+ * - New accounts (isNewUser === true or any non-demo account logging in for the first time)
+ *   always start with an empty notes list ([]).
+ * - The dedicated evaluator account ('demo@vibenotes.io') is seeded with INITIAL_NOTES on first sign-in.
+ */
+export function initializeAccountNotesOnAuth(
+  accountNotesMap: AccountNotesMap,
+  profile: Pick<WorkspaceUserProfile, 'email' | 'isNewUser'>
+): {
+  updatedAccountNotesMap: AccountNotesMap;
+  accountNotes: NoteItem[];
+} {
+  const key = normalizeAccountStorageKey(profile.email);
+  const existing = accountNotesMap[key];
+
+  if (profile.isNewUser) {
+    return {
+      updatedAccountNotesMap: {
+        ...accountNotesMap,
+        [key]: [],
+      },
+      accountNotes: [],
+    };
+  }
+
+  if (Array.isArray(existing)) {
+    return {
+      updatedAccountNotesMap: accountNotesMap,
+      accountNotes: existing,
+    };
+  }
+
+  const initialForAccount = key === DEMO_WORKSPACE_EMAIL ? INITIAL_NOTES : [];
+  return {
+    updatedAccountNotesMap: {
+      ...accountNotesMap,
+      [key]: initialForAccount,
+    },
+    accountNotes: initialForAccount,
+  };
+}

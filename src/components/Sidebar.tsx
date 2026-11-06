@@ -521,12 +521,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className="flex-1 min-h-0 overflow-y-auto smooth-touch-scroll"
         >
           {notes.length === 0 ? (
-            <div className="p-8 text-center space-y-4">
-              <p className="editorial-label">No matching notes</p>
+            <div
+              data-testid="sidebar-empty-state"
+              className="p-8 text-center space-y-4"
+            >
+              <p className="editorial-label">
+                {searchQuery || selectedTag !== 'all'
+                  ? 'No matching notes'
+                  : 'No notes yet'}
+              </p>
               <p className="text-xs text-[var(--ink-medium)]">
                 {searchQuery || selectedTag !== 'all'
                   ? 'Move a note into this filter or clear your active filter.'
-                  : 'Create your first Markdown note to begin.'}
+                  : 'Your workspace is empty. Create your first Markdown note to begin.'}
               </p>
               {searchQuery || selectedTag !== 'all' ? (
                 <button

@@ -197,16 +197,20 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
 
   if (!note) {
     return (
-      <main className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 text-center bg-[var(--surface)]">
+      <main
+        data-testid="empty-workspace-state"
+        className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 text-center bg-[var(--surface)]"
+      >
         <div className="max-w-sm space-y-4">
+          <div className="editorial-label">Clean Workspace</div>
           <h2 className="text-3xl font-semibold text-[var(--ink)] font-display">
-            No Note Selected
+            No Notes Yet
           </h2>
           <p className="text-sm text-[var(--ink-medium)] leading-relaxed">
-            Choose a note from the index or create a new Markdown document to begin writing.
+            Your workspace is empty. Click below or press Cmd/Ctrl + N to create your first Markdown note.
           </p>
           <div className="flex items-center justify-center gap-3">
-            {onToggleSidebar && (
+            {onToggleSidebar && !isSidebarOpen && (
               <button
                 type="button"
                 onClick={onToggleSidebar}
@@ -217,6 +221,7 @@ export const NoteWorkspace: React.FC<NoteWorkspaceProps> = ({
             )}
             <button
               type="button"
+              data-testid="empty-state-create-note"
               onClick={onCreateNote}
               className="btn-editorial-primary"
             >

@@ -41,6 +41,12 @@ import {
   transitionSaveToastOnEdit,
   transitionSaveToastOnDebounceComplete,
   transitionSaveToastOnReset,
+  AccountNotesMap,
+  DEMO_WORKSPACE_EMAIL,
+  mergeDefaultRegisteredAccounts,
+  normalizeAccountStorageKey,
+  getNotesForAccount,
+  initializeAccountNotesOnAuth,
 } from '../../src/utils/notesLogic';
 
 const mockNotes: NoteItem[] = [
@@ -438,7 +444,69 @@ test('[Unit] 2-second debounced Editor Saved toast state machine transitions acc
   assert.equal(toastState.noteId, null);
 });
 
+test('[Unit] Per-account note storage ensures any new account starts with 0 notes and isolates notes per account', () => {
+  assert.equal(normalizeAccountStorageKey('  NewUser@VibeNotes.io  '), 'newuser@vibenotes.io');
+  assert.equal(normalizeAccountStorageKey(''), 'anonymous');
 
+  let accountNotesMap: AccountNotesMap = {};
 
+  // 1. Brand-new Sign Up account starts with 0 notes ([])
+  const newSignUpProfile = {
+    email: 'newuser@vibenotes.io',
+    isNewUser: true,
+  };
+  const initNewRes = initializeAccountNotesOnAuth(accountNotesMap, newSignUpProfile);
+  accountNotesMap = initNewRes.updatedAccountNotesMap;
+  assert.deepEqual(initNewRes.accountNotes, []);
+  assert.deepEqual(getNotesForAccount(accountNotesMap, newSignUpProfile), []);
 
+  // 2. User creates a note inside 'newuser@vibenotes.io'
+  const createdNote = createNewNoteItem({
+    id: 'user-1-note',
+    title: 'My First Personal Note',
+  });
+  accountNotesMap = {
+    ...accountNotesMap,
+    [normalizeAccountStorageKey(newSignUpProfile.email)]: [createdNote],
+  };
+  assert.equal(getNotesForAccount(accountNotesMap, newSignUpProfile).length, 1);
+
+  // 3. Another new account ('second@vibenotes.io') logs in -> has 0 notes ([]), completely isolated from first user
+  const secondProfile = {
+    email: 'second@vibenotes.io',
+    isNewUser: false,
+  };
+  const initSecondRes = initializeAccountNotesOnAuth(accountNotesMap, secondProfile);
+  accountNotesMap = initSecondRes.updatedAccountNotesMap;
+  assert.deepEqual(initSecondRes.accountNotes, []);
+  assert.equal(getNotesForAccount(accountNotesMap, secondProfile).length, 0);
+
+  // 4. First user signs back in (isNewUser: false) -> retains their 1 created note
+  const returningFirstProfile = {
+    email: 'newuser@vibenotes.io',
+    isNewUser: false,
+  };
+  const returnFirstRes = initializeAccountNotesOnAuth(
+    accountNotesMap,
+    returningFirstProfile
+  );
+  assert.equal(returnFirstRes.accountNotes.length, 1);
+  assert.equal(returnFirstRes.accountNotes[0].title, 'My First Personal Note');
+
+  // 5. Evaluator demo account (demo@vibenotes.io) is pre-registered and seeded with 4 sample notes
+  const mergedAccounts = mergeDefaultRegisteredAccounts([]);
+  assert.ok(mergedAccounts.some((a) => a.email === DEMO_WORKSPACE_EMAIL));
+  const demoLogin = validateEmailLoginInput(
+    DEMO_WORKSPACE_EMAIL,
+    'demo1234',
+    '',
+    mergedAccounts
+  );
+  assert.equal(demoLogin.ok, true);
+  const demoNotesRes = initializeAccountNotesOnAuth(
+    accountNotesMap,
+    demoLogin.profile!
+  );
+  assert.equal(demoNotesRes.accountNotes.length, 4);
+});
 

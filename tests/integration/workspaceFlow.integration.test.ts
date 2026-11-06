@@ -34,6 +34,10 @@ import {
   transitionSaveToastOnEdit,
   transitionSaveToastOnDebounceComplete,
   transitionSaveToastOnReset,
+  AccountNotesMap,
+  normalizeAccountStorageKey,
+  getNotesForAccount,
+  initializeAccountNotesOnAuth,
 } from '../../src/utils/notesLogic';
 
 test('[Integration Flow 1] Note Authoring -> Toolbar Formatting -> Auto-Complete -> Undo/Redo -> Local Version Restore -> PDF Export HTML', () => {
@@ -266,8 +270,10 @@ test('[Integration Flow 3] Global Keyboard Shortcuts Workflow (Cmd/Ctrl+N -> Cmd
   assert.equal(KEYBOARD_SHORTCUTS.length, 10);
 });
 
-test('[Integration Flow 4] Notion-Style Auth Flow (Sign Up New User -> Sign Out -> Sign In -> Google Demo -> Sidebar Sorting)', () => {
-  // Step 1: New user registers via Sign Up tab
+test('[Integration Flow 4] Notion-Style Auth Flow (Sign Up New User with 0 Notes -> Create Note -> Sign Out -> Second New Account with 0 Notes -> Sign In -> Sidebar Sorting)', () => {
+  let accountNotesMap: AccountNotesMap = {};
+
+  // Step 1: New user registers via Sign Up tab -> starts with 0 notes ([])
   const signUpRes = validateEmailSignUpInput(
     'Minh Tran',
     'minh.tran@vibenotes.dev',
@@ -281,23 +287,15 @@ test('[Integration Flow 4] Notion-Style Auth Flow (Sign Up New User -> Sign Out 
   const registeredAccounts = signUpRes.updatedAccounts;
   assert.equal(registeredAccounts.length, 1);
 
-  // Step 2: User signs out and signs back in with the registered email and password
-  const signInRes = validateEmailLoginInput(
-    'minh.tran@vibenotes.dev',
-    'workspace2026',
-    '',
-    registeredAccounts
+  const authInitMinh = initializeAccountNotesOnAuth(
+    accountNotesMap,
+    signUpRes.profile!
   );
-  assert.equal(signInRes.ok, true);
-  assert.equal(signInRes.profile?.name, 'Minh Tran');
-  assert.equal(signInRes.profile?.provider, 'email');
+  accountNotesMap = authInitMinh.updatedAccountNotesMap;
+  assert.equal(authInitMinh.accountNotes.length, 0);
+  assert.equal(getNotesForAccount(accountNotesMap, signUpRes.profile!).length, 0);
 
-  // Step 3: User tests Google Demo Sign-In profile creation
-  const googleUser = createGoogleDemoUserProfile();
-  assert.equal(googleUser.provider, 'google');
-  assert.ok(googleUser.name.length > 0);
-
-  // Step 4: Inside the workspace, user sorts notes by 'dateModified', 'title', and 'pinned'
+  // Step 2: Minh creates 3 notes in his personal workspace
   const workspaceNotes = [
     createNewNoteItem({
       id: 'w-1',
@@ -318,19 +316,58 @@ test('[Integration Flow 4] Notion-Style Auth Flow (Sign Up New User -> Sign Out 
       updatedAt: '2026-10-15T10:00:00.000Z',
     }),
   ];
+  accountNotesMap = {
+    ...accountNotesMap,
+    [normalizeAccountStorageKey(signUpRes.profile!.email)]: workspaceNotes,
+  };
+  assert.equal(getNotesForAccount(accountNotesMap, signUpRes.profile!).length, 3);
 
+  // Step 3: Minh signs out and a second new user signs up -> second account has 0 notes ([])
+  const secondSignUp = validateEmailSignUpInput(
+    'Lan Pham',
+    'lan.pham@vibenotes.dev',
+    'lanpass123',
+    'lanpass123',
+    registeredAccounts
+  );
+  assert.equal(secondSignUp.ok, true);
+  const authInitLan = initializeAccountNotesOnAuth(
+    accountNotesMap,
+    secondSignUp.profile!
+  );
+  accountNotesMap = authInitLan.updatedAccountNotesMap;
+  assert.equal(authInitLan.accountNotes.length, 0);
+  assert.equal(getNotesForAccount(accountNotesMap, secondSignUp.profile!).length, 0);
+
+  // Step 4: Minh signs back in -> recovers his 3 saved notes
+  const signInRes = validateEmailLoginInput(
+    'minh.tran@vibenotes.dev',
+    'workspace2026',
+    '',
+    secondSignUp.updatedAccounts
+  );
+  assert.equal(signInRes.ok, true);
+  assert.equal(signInRes.profile?.name, 'Minh Tran');
+  assert.equal(signInRes.profile?.provider, 'email');
+  const minhRestoredNotes = getNotesForAccount(accountNotesMap, signInRes.profile!);
+  assert.equal(minhRestoredNotes.length, 3);
+
+  // Step 5: User tests Google Demo Sign-In profile creation -> also starts with 0 notes if new
+  const googleUser = createGoogleDemoUserProfile('new.google.user@gmail.com');
+  assert.equal(googleUser.provider, 'google');
+  assert.equal(getNotesForAccount(accountNotesMap, googleUser).length, 0);
+
+  // Step 6: Inside Minh's workspace, user sorts notes by 'dateModified', 'title', and 'pinned'
   assert.deepEqual(
-    sortNotesByOption(workspaceNotes, 'dateModified').map((n) => n.id),
+    sortNotesByOption(minhRestoredNotes, 'dateModified').map((n) => n.id),
     ['w-2', 'w-3', 'w-1']
   );
   assert.deepEqual(
-    sortNotesByOption(workspaceNotes, 'title').map((n) => n.id),
+    sortNotesByOption(minhRestoredNotes, 'title').map((n) => n.id),
     ['w-2', 'w-3', 'w-1']
   );
   assert.deepEqual(
-    sortNotesByOption(workspaceNotes, 'pinned').map((n) => n.id),
+    sortNotesByOption(minhRestoredNotes, 'pinned').map((n) => n.id),
     ['w-1', 'w-2', 'w-3']
   );
 });
-
-

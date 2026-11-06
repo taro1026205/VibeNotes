@@ -92,10 +92,11 @@ Thư mục lưu trữ: **`/docs/DAILY_LOG.md`** (Đi kèm kế hoạch **[`PROJE
 
 ---
 
-## Ngày 6 — Xác thực Mức View Kiểu Notion (`LoginView`), Đồng bộ Google Keep & Tối ưu Giao diện Mobile / Tablet
+## Ngày 6 — Xác thực Mức View Kiểu Notion (`LoginView`), Cô lập Ghi chú theo Tài khoản (`0 Notes` cho Account mới), Đồng bộ Google Keep & Tối ưu Giao diện Mobile / Tablet
 - **Hôm qua làm gì**: Hoàn thành đồng bộ cuộn ở chế độ Split và tính năng xuất file `.PDF` / `.MD`.
 - **Hôm nay làm gì**:
-  - Xây dựng màn hình **`LoginView.tsx`** phong cách Notion (100% tiếng Anh) hỗ trợ **`Sign In`**, **`Sign Up (New User)`** (lưu danh sách tài khoản vào `vibenotes_registered_users_v1`), **`Continue with Google`** và **`Explore Guest Workspace`**.
+  - Xây dựng màn hình **`LoginView.tsx`** phong cách Notion (100% tiếng Anh) hỗ trợ **`Sign In`**, **`Sign Up (New User)`** (lưu danh sách tài khoản vào `vibenotes_registered_users_v1`), **`Continue with Google`** và **`Continue as Guest`**.
+  - Cô lập danh sách ghi chú, filter và lịch sử phiên bản theo từng tài khoản (`vibenotes_account_notes_v2`, `initializeAccountNotesOnAuth`, `getNotesForAccount`) để bất kỳ **tài khoản mới** nào đăng ký hoặc đăng nhập lần đầu đều bắt đầu với **`0` ghi chú (`[]`)** cùng màn hình Empty Workspace trực quan (`No Notes Yet`).
   - Hiển thị tên User kèm Avatar viết tắt ở góc trái màn hình (trên đỉnh Sidebar và dưới góc trái Footer); khi click vào mở menu tài khoản với nút **`Sign Out`** thuần tiếng Anh.
   - Tích hợp xác thực Firebase Google OAuth và kết nối Google Keep REST API (`keep.googleapis.com/v1/notes`) kèm tính năng **Import / Export Keep JSON Snapshot** trong `GoogleKeepDrawer`.
   - Tái cấu trúc giao diện đa thiết bị (Mobile `< 768px` & Tablet `768px–1023px`) lấy cảm hứng từ **Notion**:
@@ -105,23 +106,25 @@ Thư mục lưu trữ: **`/docs/DAILY_LOG.md`** (Đi kèm kế hoạch **[`PROJE
 - **Vướng mắc & Giải pháp**:
   - *Vướng mắc 1*: Quyền `https://www.googleapis.com/auth/keep` chỉ mở mặc định cho tài khoản Google Workspace Enterprise.
   - *Giải pháp 1*: Thiết kế cơ chế **Hybrid Sync** kết hợp OAuth API và công cụ Import/Export JSON dự phòng.
-  - *Vướng mắc 2*: Trên điện thoại, bố cục cũ để Sidebar chiếm chỗ và các nút công cụ tự xuống dòng gây hẹp vùng soạn thảo, cuộn thiếu độ mượt.
-  - *Giải pháp 2*: Áp dụng ngăn kéo trượt `Slide-over Drawer`, thanh công cụ vuốt ngang 1 hàng, khung `100dvh` và class `.smooth-touch-scroll` tách biệt thanh cuộn cho từng khung.
+  - *Vướng mắc 2*: Nếu dùng chung một khóa `localStorage` cho mọi tài khoản hoặc tự động nạp dữ liệu mẫu `INITIAL_NOTES`, tài khoản mới đăng ký sẽ bị dính các ghi chú có sẵn.
+  - *Giải pháp 2*: Lưu trữ ghi chú theo khóa email chuẩn hoá (`normalizeAccountStorageKey`) trong `vibenotes_account_notes_v2` và khởi tạo mảng rỗng `[]` (`0 notes`) cho mọi tài khoản mới.
+  - *Vướng mắc 3*: Trên điện thoại, bố cục cũ để Sidebar chiếm chỗ và các nút công cụ tự xuống dòng gây hẹp vùng soạn thảo, cuộn thiếu độ mượt.
+  - *Giải pháp 3*: Áp dụng ngăn kéo trượt `Slide-over Drawer`, thanh công cụ vuốt ngang 1 hàng, khung `100dvh` và class `.smooth-touch-scroll` tách biệt thanh cuộn cho từng khung.
 - **Commit tiêu biểu**:
-  - `feat(auth-view): add Notion-style Sign In / Sign Up login screen and left-corner user profile with English Sign Out popover`
+  - `feat(auth-view): add Notion-style Sign In / Sign Up login screen, per-account empty workspace for new users, and left-corner English Sign Out popover`
   - `feat(keep-sync): integrate Google Keep REST API with confirmation dialogs and JSON backup fallback`
   - `feat(responsive): redesign mobile & tablet layout with Notion-style slide-over drawer, single-row touch toolbar, and smooth 100dvh split scrolling`
 
 ---
 
 ## Ngày 7 — Kiểm thử Tự động (`/tests`) & Đóng gói Tài liệu Tiến độ (`/docs`)
-- **Hôm qua làm gì**: Hoàn thiện màn hình đăng nhập/đăng ký kiểu Notion, ngăn kéo đồng bộ Google Keep và nâng cấp trải nghiệm Responsive trên Mobile/Tablet.
+- **Hôm qua làm gì**: Hoàn thiện màn hình đăng nhập/đăng ký kiểu Notion, cô lập không gian ghi chú theo tài khoản, ngăn kéo đồng bộ Google Keep và nâng cấp trải nghiệm Responsive trên Mobile/Tablet.
 - **Hôm nay làm gì**:
-  - Tổ chức thư mục `/tests` gồm **11 Unit Test Suites** (`tests/unit/notesLogic.unit.test.ts`), **4 Integration Test Suites** (`tests/integration/workspaceFlow.integration.test.ts`) — tổng cộng **15/15 test suites tự động** — và tài liệu **14 kịch bản kiểm thử thủ công** (`tests/MANUAL_TEST_CASES.md`, từ `TC-01` đến `TC-14`).
+  - Tổ chức thư mục `/tests` gồm **12 Unit Test Suites** (`tests/unit/notesLogic.unit.test.ts`), **4 Integration Test Suites** (`tests/integration/workspaceFlow.integration.test.ts`) — tổng cộng **16/16 test suites tự động** — và tài liệu **14 kịch bản kiểm thử thủ công** (`tests/MANUAL_TEST_CASES.md`, từ `TC-01` đến `TC-14`).
   - Đóng gói toàn bộ file ghi log và kế hoạch tiến độ vào thư mục riêng **`/docs`** (`docs/DAILY_LOG.md`, `docs/PROJECT_PLAN_WBS.md`, `docs/PROJECT_PLAN_WBS.csv`) và đồng bộ 100% `README.md`, `DECISIONS.md`, `MANUAL_TEST_CASES.md` theo code mới nhất.
 - **Vướng mắc & Giải pháp**:
   - *Vướng mắc*: Khi hiển thị 10 phím tắt trong `ShortcutsModal` theo 1 cột dọc trên Desktop, mục cuối cùng dễ bị khuất nhẹ ở mép dưới.
-  - *Giải pháp*: Chuyển nội dung `ShortcutsModal` sang lưới 2 cột (`md:grid-cols-2`) trên màn hình Desktop để hiển thị trọn vẹn cả 10 phím tắt cùng lúc; toàn bộ **15/15 test suites** trong `/tests` và `npm run build` đều đạt PASS 100%.
+  - *Giải pháp*: Chuyển nội dung `ShortcutsModal` sang lưới 2 cột (`md:grid-cols-2`) trên màn hình Desktop để hiển thị trọn vẹn cả 10 phím tắt cùng lúc; toàn bộ **16/16 test suites** trong `/tests` và `npm run build` đều đạt PASS 100%.
 - **Commit tiêu biểu**:
-  - `test(suite): add 15 unit/integration test suites in /tests and synchronize all project docs in /docs, README, and DECISIONS`
+  - `test(suite): add 16 unit/integration test suites in /tests and synchronize all project docs in /docs, README, and DECISIONS`
 
