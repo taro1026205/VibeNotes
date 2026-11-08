@@ -28,6 +28,7 @@ import {
   getNotesForAccount,
   initializeAccountNotesOnAuth,
   mergeDefaultRegisteredAccounts,
+  DEMO_WORKSPACE_EMAIL,
 } from './utils/notesLogic';
 import { exportNoteToPdf } from './utils/pdfExport';
 import { initAuth, googleSignIn, logout } from './services/keepService';
@@ -61,7 +62,7 @@ export default function App() {
         typeof window !== 'undefined' &&
         new URLSearchParams(window.location.search).get('autostart') === '1'
       ) {
-        return createGoogleDemoUserProfile();
+        return createGoogleDemoUserProfile(DEMO_WORKSPACE_EMAIL, 'Demo Evaluator');
       }
     } catch (e) {
       console.error('Failed to load user profile from localStorage:', e);
@@ -446,12 +447,27 @@ export default function App() {
     setNotes((prev) => moveNoteToFilter(prev, noteId, targetFilterId));
   };
 
+  const versionBurstNoteIdRef = useRef<string | null>(null);
+  const versionBurstTimerRef = useRef<number | null>(null);
+
+  const resetVersionBurst = () => {
+    versionBurstNoteIdRef.current = null;
+    if (versionBurstTimerRef.current !== null) {
+      window.clearTimeout(versionBurstTimerRef.current);
+      versionBurstTimerRef.current = null;
+    }
+  };
+
   const handleCreateNote = () => {
+    resetVersionBurst();
     const newNote = createNewNoteItem({
       tag: selectedTag === 'all' ? (allFilters[0]?.id || '') : selectedTag,
     });
     setNotes((prev) => [newNote, ...prev]);
     setActiveNoteId(newNote.id);
+    if (searchQuery) {
+      setSearchQuery('');
+    }
     if (viewMode === 'preview') {
       setViewMode('split');
     }
@@ -461,6 +477,7 @@ export default function App() {
   };
 
   const handleSelectNote = (id: string) => {
+    resetVersionBurst();
     setActiveNoteId(id);
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
       setIsSidebarOpen(false);
@@ -472,12 +489,24 @@ export default function App() {
     if (changes.title !== undefined || changes.content !== undefined) {
       const existingNote = notes.find((n) => n.id === id);
       if (existingNote) {
-        setVersionHistory((prevHistory) =>
-          recordNoteVersionSnapshot(prevHistory, existingNote, {
-            title: changes.title,
-            content: changes.content,
-          })
-        );
+        // Record the baseline snapshot on the first edit of a typing burst so rapid typing
+        // does not overwrite all 10 version slots with single-character diffs.
+        if (versionBurstNoteIdRef.current !== id) {
+          setVersionHistory((prevHistory) =>
+            recordNoteVersionSnapshot(prevHistory, existingNote, {
+              title: changes.title,
+              content: changes.content,
+            })
+          );
+          versionBurstNoteIdRef.current = id;
+        }
+        if (versionBurstTimerRef.current !== null) {
+          window.clearTimeout(versionBurstTimerRef.current);
+        }
+        versionBurstTimerRef.current = window.setTimeout(() => {
+          versionBurstNoteIdRef.current = null;
+          versionBurstTimerRef.current = null;
+        }, 1500);
       }
     }
     setNotes((prev) =>
@@ -488,6 +517,7 @@ export default function App() {
   };
 
   const handleRestorePreviousVersion = (id: string) => {
+    resetVersionBurst();
     const { updatedHistoryMap, restoredSnapshot } = restorePreviousNoteVersion(
       versionHistory,
       id
@@ -614,12 +644,28 @@ export default function App() {
   ) => {
     const imported = createNewNoteItem({
       title,
-      content: `# ${title}\n\n${content}`,
+      content: content.trimStart().startsWith('#')
+        ? content
+        : `# ${title}\n\n${content}`,
       tag: 'sky',
       keepResourceName,
     });
     setNotes((prev) => [imported, ...prev]);
     setActiveNoteId(imported.id);
+  };
+
+  const handleImportKeepJsonNotes = (importedNotes: NoteItem[]) => {
+    if (importedNotes.length === 0) return;
+    setNotes((prev) => {
+      const existingIds = new Set(prev.map((n) => n.id));
+      const sanitized = importedNotes.map((item, idx) =>
+        existingIds.has(item.id)
+          ? { ...item, id: `${item.id}-imp-${Date.now()}-${idx}` }
+          : item
+      );
+      return [...sanitized, ...prev];
+    });
+    setActiveNoteId(importedNotes[0].id);
   };
 
   const handleExportMarkdown = () => {
@@ -901,7 +947,9 @@ export default function App() {
         onSignIn={handleGoogleSignIn}
         onSignOut={handleGoogleSignOut}
         activeNote={activeNote}
+        workspaceNotes={notes}
         onImportKeepNote={handleImportKeepNote}
+        onImportKeepJsonNotes={handleImportKeepJsonNotes}
         onUpdateActiveNoteKeepResource={(noteId, resourceName) =>
           handleUpdateNote(noteId, { keepResourceName: resourceName })
         }

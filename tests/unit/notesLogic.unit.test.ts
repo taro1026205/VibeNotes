@@ -47,6 +47,8 @@ import {
   normalizeAccountStorageKey,
   getNotesForAccount,
   initializeAccountNotesOnAuth,
+  exportNotesToKeepJson,
+  parseImportedKeepJson,
 } from '../../src/utils/notesLogic';
 
 const mockNotes: NoteItem[] = [
@@ -249,6 +251,13 @@ test('[Unit] computeSyncedScrollTop, computeNoteMetrics, extractPlainTextSnippet
   const html = buildPrintableNoteHtml(mockNotes[0], getTagMetadata('indigo').label);
   assert.ok(html.includes('Architecture Blueprint'));
   assert.ok(html.includes('VibeNotes · Engineering'));
+
+  // Verify Keep JSON Snapshot export & import roundtrip
+  const exportedJson = exportNotesToKeepJson(mockNotes);
+  const importedRes = parseImportedKeepJson(exportedJson);
+  assert.equal(importedRes.ok, true);
+  assert.equal(importedRes.notes.length, 3);
+  assert.equal(importedRes.notes[0].title, 'Architecture Blueprint');
 });
 
 test('[Unit] KEYBOARD_SHORTCUTS, cycleEditorViewMode, and resolveGlobalShortcutAction handle shortcut mappings', () => {
@@ -380,6 +389,16 @@ test('[Unit] View-level Sign In and Sign Up (New User) validation handle email, 
   );
   assert.equal(duplicateSignUp.ok, false);
   assert.ok(duplicateSignUp.error?.includes('already exists'));
+
+  // Unregistered email Sign In when registeredAccounts is non-empty should be rejected
+  const unregisteredLogin = validateEmailLoginInput(
+    'unknown@vibenotes.io',
+    'pass123',
+    '',
+    validSignUp.updatedAccounts
+  );
+  assert.equal(unregisteredLogin.ok, false);
+  assert.ok(unregisteredLogin.error?.includes('No account found'));
 
   // Sign In with registered account: wrong password fails, right password resolves saved full name
   const wrongPassLogin = validateEmailLoginInput(

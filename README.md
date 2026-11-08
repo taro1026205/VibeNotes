@@ -95,11 +95,9 @@ classDiagram
     }
 
     class WorkspaceUserProfile {
-        +string id
         +string name
         +string email
-        +string provider
-        +string avatarInitials
+        +AuthProviderType provider
         +string signedInAt
         +boolean isNewUser
     }
@@ -120,8 +118,8 @@ classDiagram
 
     class EditorSaveToastState {
         +string status
-        +string lastSavedAt
-        +number editSequence
+        +string noteId
+        +string savedAt
     }
 
     class ShortcutInfoItem {
@@ -185,7 +183,7 @@ classDiagram
 | Hạng mục | Mục tiêu ban đầu (1 tuần) | Kết quả đạt được | Trạng thái |
 | :--- | :--- | :--- | :--- |
 | **Quản lý Ghi chú (CRUD)** | Thêm, xem, sửa, xoá (có xác nhận), ghim ghi chú ưu tiên lên đầu. | Hoạt động ổn định, phản hồi tức thì, hỗ trợ cả nút bấm lẫn phím tắt (`Cmd/Ctrl + N`, `Cmd/Ctrl + P`) và modal xác nhận xoá. | **Hoàn thành 100%** |
-| **Lưu trữ Cục bộ, Thông báo `'Saved'` & Lịch sử Phiên bản (`localStorage`)** | Tự động lưu ghi chú, filter, chế độ sắp xếp, theme, hiển thị thông báo `'Saved'` sau 2 giây ngừng gõ và lưu ngăn xếp các phiên bản nội dung trước đó. | Tự động lưu với độ trễ `0ms`, hiển thị toast **`'Saved'`** tinh tế ở góc trên bên phải khung soạn thảo sau 2 giây ngừng gõ (`SAVE_TOAST_DEBOUNCE_MS = 2000ms`), kèm ngăn xếp `vibenotes_version_history_v1` (tối đa 10 bản/ghi chú) và nút **`Restore previous version`**. | **Hoàn thành 100%** |
+| **Lưu trữ Cục bộ, Thông báo `'Saved'` & Lịch sử Phiên bản (`localStorage`)** | Tự động lưu ghi chú, filter, chế độ sắp xếp, theme, hiển thị thông báo `'Saved'` sau 2 giây ngừng gõ và lưu ngăn xếp các phiên bản nội dung trước đó. | Tự động lưu với độ trễ `0ms`, hiển thị toast **`'Saved'`** tinh tế ở góc trên bên phải khung soạn thảo sau 2 giây ngừng gõ (`SAVE_TOAST_DEBOUNCE_MS = 2000ms`), kèm ngăn xếp `vibenotes_account_version_history_v2` (tối đa 10 bản/ghi chú) và nút **`Restore previous version`**. | **Hoàn thành 100%** |
 | **Màn hình Đăng nhập / Đăng ký kiểu Notion (`LoginView`) & Cô lập Dữ liệu theo Tài khoản** | Hỗ trợ `Sign In`, `Sign Up (New User)` và `Google Account` ở mức View, hiển thị tên User ở góc trái kèm nút `Sign Out`; tài khoản mới vào có `0` ghi chú (`[]`). | Giao diện Notion-style hỗ trợ đăng ký tài khoản mới (`vibenotes_registered_users_v1`), cô lập ghi chú theo từng tài khoản (`vibenotes_account_notes_v2` — tài khoản mới bắt đầu hoàn toàn trống `0 notes`), hiển thị tên User ở góc trái kèm menu **`Sign Out`**. | **Hoàn thành 100%** |
 | **Trình soạn thảo Markdown & Undo/Redo** | Hỗ trợ Markdown, thanh công cụ nổi, gợi ý cú pháp tự động (`/`, `#`, `-`, `>`), Undo/Redo. | Đầy đủ Floating Toolbar, Auto-complete theo con trỏ, Undo/Redo bằng nút bấm & phím tắt (`⌘Z`/`Ctrl+Z`, `⌘⇧Z`/`Ctrl+Y`). | **Hoàn thành 100%** |
 | **Bảng Tra cứu Phím tắt (`ShortcutsModal`)** | Có hộp thoại `Info` hiển thị bảng Cheat-Sheet phím tắt trực quan. | Hộp thoại `Keyboard Shortcuts Cheat-Sheet` 2 cột (`Cmd/Ctrl + /` hoặc nút `Shortcuts`), hỗ trợ đầy đủ 10 phím tắt toàn cục & trình soạn thảo. | **Hoàn thành 100%** |
@@ -206,7 +204,7 @@ Trong quá trình phát triển dự án trong 1 tuần, 4 rủi ro kỹ thuật
 
 ### Rủi ro 1: Scope Creep & Mất lịch sử Undo / Phiên bản khi thao tác trên `<textarea>` có điều khiển
 - **Vấn đề**: Việc tích hợp các thư viện editor đồ sộ (Monaco/ProseMirror) dễ gây xung đột state và tăng kích thước bundle; trong khi nếu dùng `<textarea>` có điều khiển bởi React state thì khi chèn cú pháp từ thanh công cụ hoặc tải lại trang (`F5`), lịch sử Undo mặc định của trình duyệt sẽ bị xoá.
-- **Hành động ứng phó**: Giữ kiến trúc `<textarea>` gốc kết hợp thư viện **`marked`**, đồng thời xây dựng 2 tầng bảo vệ: (1) Ngăn xếp **`EditorHistoryState`** (`Undo`/`Redo` tức thì kèm vị trí con trỏ) và (2) Ngăn xếp **`NoteVersionHistoryMap`** lưu bền vững trong `localStorage` (`vibenotes_version_history_v1`, giới hạn `MAX_NOTE_VERSIONS = 10` bản/ghi chú để không tràn bộ nhớ) kèm nút **`Restore previous version`**.
+- **Hành động ứng phó**: Giữ kiến trúc `<textarea>` gốc kết hợp thư viện **`marked`**, đồng thời xây dựng 2 tầng bảo vệ: (1) Ngăn xếp **`EditorHistoryState`** (`Undo`/`Redo` tức thì kèm vị trí con trỏ) và (2) Ngăn xếp **`NoteVersionHistoryMap`** lưu bền vững trong `localStorage` (`vibenotes_account_version_history_v2`, giới hạn `MAX_NOTE_VERSIONS = 10` bản/ghi chú để không tràn bộ nhớ) kèm nút **`Restore previous version`**.
 
 ### Rủi ro 2: Lỗi mất dấu Tiếng Việt khi xuất PDF bằng font mặc định của `jsPDF`
 - **Vấn đề**: Phương thức `pdf.text()` mặc định của `jsPDF` chỉ hỗ trợ bảng mã ASCII chuẩn, dẫn đến lỗi hiển thị ký tự tiếng Việt có dấu và mất định dạng bảng biểu/code block của Markdown.

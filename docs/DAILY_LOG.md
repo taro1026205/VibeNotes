@@ -24,9 +24,9 @@ Thư mục lưu trữ: **`/docs/DAILY_LOG.md`** (Đi kèm kế hoạch **[`PROJE
 - **Hôm qua làm gì**: Hoàn thành khung giao diện 2 cột, cấu hình phông chữ và chế độ Sáng/Tối.
 - **Hôm nay làm gì**:
   - Cài đặt đầy đủ chức năng Thêm mới (`+ New Note`), Đọc, Sửa tiêu đề/nội dung, Ghim (`Pin`/`Pinned`) và Xoá ghi chú.
-  - Kết nối tầng lưu trữ tự động vào `localStorage` (`vibenotes_workspace_notes_v1`).
+  - Kết nối tầng lưu trữ tự động vào `localStorage` (`vibenotes_account_notes_v2`).
   - Xây dựng thông báo **`'Saved'`** tinh tế (`data-testid="editor-saved-toast"`, `role="status"`, `aria-live="polite"`) xuất hiện ở góc trên bên phải khung soạn thảo khi người dùng ngừng gõ **2 giây** (`SAVE_TOAST_DEBOUNCE_MS = 2000`, `EditorSaveToastState`) để xác nhận các thay đổi Markdown đã được lưu an toàn.
-  - Xây dựng hệ thống lưu trữ **ngăn xếp lịch sử phiên bản cục bộ (`vibenotes_version_history_v1`)** trong `localStorage` (`recordNoteVersionSnapshot`, `restorePreviousNoteVersion`, tối đa 10 bản ghi/ghi chú) và bổ sung nút **`Restore previous version`** trên thanh điều khiển trình soạn thảo.
+  - Xây dựng hệ thống lưu trữ **ngăn xếp lịch sử phiên bản cục bộ (`vibenotes_account_version_history_v2`)** trong `localStorage` (`recordNoteVersionSnapshot`, `restorePreviousNoteVersion`, tối đa 10 bản ghi/ghi chú) và bổ sung nút **`Restore previous version`** trên thanh điều khiển trình soạn thảo.
   - Xây dựng hộp thoại xác nhận `ConfirmDialog` trước khi xoá ghi chú để tránh mất dữ liệu ngoài ý muốn.
 - **Vướng mắc & Giải pháp**:
   - *Vướng mắc 1*: Không thể dùng `window.confirm` mặc định của trình duyệt vì ứng dụng chạy trong môi trường khung nhúng (iFrame) và thiếu tính thẩm mỹ.
@@ -43,7 +43,7 @@ Thư mục lưu trữ: **`/docs/DAILY_LOG.md`** (Đi kèm kế hoạch **[`PROJE
 ## Ngày 3 — Hệ thống Filter Động, Sắp xếp Ghi chú Đa chế độ (`Sort By`) & Tìm kiếm Đa trường
 - **Hôm qua làm gì**: Hoàn thiện CRUD ghi chú, tự động lưu `localStorage`, lịch sử phiên bản và hộp thoại xác nhận xoá.
 - **Hôm nay làm gì**:
-  - Xây dựng tính năng tạo Filter mới (`+ New Filter`) và lưu danh sách Filter vào `localStorage` (`vibenotes_custom_filters_v1`).
+  - Xây dựng tính năng tạo Filter mới (`+ New Filter`) và lưu danh sách Filter vào `localStorage` (`vibenotes_account_filters_v2`).
   - Cho phép xoá bất kỳ Filter nào ngoại trừ filter gốc `All` bằng nút `×`.
   - Hỗ trợ gắn/chuyển Filter cho ghi chú qua menu chọn `<select>` gọn nhẹ trên từng thẻ ghi chú hoặc kéo-thả (`Drag & Drop`).
   - Bổ sung thanh chọn **`Sort By`** (`data-testid="sidebar-sort-select"`) trên Sidebar cho phép sắp xếp danh sách ghi chú theo **3 chế độ**: **`Date Modified`** (`dateModified`), **`Title`** (`title` — bảng chữ cái A–Z) và **`Pinned`** (`pinned`), lưu bền vững lựa chọn vào `localStorage` (`vibenotes_sort_by_v1`).

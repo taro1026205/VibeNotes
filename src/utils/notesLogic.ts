@@ -229,6 +229,16 @@ export function getTagMetadata(
   tag: TagColor,
   allFilters: NoteTag[] = TAG_CATEGORIES
 ): NoteTag {
+  if (!tag) {
+    return (
+      allFilters[0] || {
+        id: 'all',
+        label: 'All',
+        dotClass: 'bg-indigo-500',
+        activeTextClass: 'text-indigo-600 dark:text-indigo-400',
+      }
+    );
+  }
   return (
     allFilters.find((t) => t.id === tag) || {
       id: tag,
@@ -1183,6 +1193,15 @@ export function validateEmailLoginInput(
     (acc) => acc.email.toLowerCase() === email
   );
 
+  if (registeredAccounts.length > 0 && !matchedAccount) {
+    return {
+      ok: false,
+      profile: null,
+      error:
+        'No account found with this email. Please switch to Sign Up (New User) to register, or use demo@vibenotes.io.',
+    };
+  }
+
   if (matchedAccount && matchedAccount.password !== password) {
     return {
       ok: false,
@@ -1507,4 +1526,117 @@ export function initializeAccountNotesOnAuth(
     },
     accountNotes: initialForAccount,
   };
+}
+
+/**
+ * Serializes workspace notes into a Google Keep-compatible JSON snapshot string
+ * for Hybrid Sync backup / restore on any personal @gmail.com account.
+ */
+export function exportNotesToKeepJson(notes: NoteItem[]): string {
+  const payload = {
+    source: 'VibeNotes Keep Snapshot',
+    version: '2.0',
+    exportedAt: new Date().toISOString(),
+    notes: notes.map((note) => ({
+      name: note.keepResourceName || `notes/${note.id}`,
+      id: note.id,
+      title: note.title || 'Untitled Note',
+      textContent: note.content,
+      body: {
+        text: {
+          text: note.content,
+        },
+      },
+      tag: note.tag || 'indigo',
+      pinned: Boolean(note.pinned),
+      createdAt: note.createdAt,
+      updatedAt: note.updatedAt,
+    })),
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+/**
+ * Parses an imported Google Keep JSON snapshot (or raw Keep JSON array/object)
+ * into valid NoteItem records.
+ */
+export function parseImportedKeepJson(rawJson: string): {
+  ok: boolean;
+  notes: NoteItem[];
+  error?: string;
+} {
+  const trimmed = (rawJson || '').trim();
+  if (!trimmed) {
+    return {
+      ok: false,
+      notes: [],
+      error: 'JSON content cannot be empty.',
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    const rawItems: any[] = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.notes)
+        ? parsed.notes
+        : typeof parsed === 'object' && parsed !== null
+          ? [parsed]
+          : [];
+
+    if (rawItems.length === 0) {
+      return {
+        ok: false,
+        notes: [],
+        error: 'No valid notes found in the JSON snapshot.',
+      };
+    }
+
+    const now = new Date().toISOString();
+    const notes: NoteItem[] = rawItems.map((item, idx) => {
+      const title =
+        typeof item?.title === 'string' && item.title.trim()
+          ? item.title.trim()
+          : `Imported Keep Note ${idx + 1}`;
+      const bodyContent =
+        typeof item?.textContent === 'string'
+          ? item.textContent
+          : typeof item?.content === 'string'
+            ? item.content
+            : typeof item?.body?.text?.text === 'string'
+              ? item.body.text.text
+              : `# ${title}`;
+
+      return createNewNoteItem({
+        id:
+          typeof item?.id === 'string' && item.id.trim()
+            ? item.id.trim()
+            : `keep-json-${Date.now()}-${idx}`,
+        title,
+        content: bodyContent,
+        tag:
+          typeof item?.tag === 'string' && item.tag.trim()
+            ? item.tag.trim()
+            : 'sky',
+        pinned: Boolean(item?.pinned || item?.isPinned),
+        createdAt:
+          typeof item?.createdAt === 'string' ? item.createdAt : now,
+        updatedAt:
+          typeof item?.updatedAt === 'string' ? item.updatedAt : now,
+        keepResourceName:
+          typeof item?.name === 'string' ? item.name : undefined,
+      });
+    });
+
+    return {
+      ok: true,
+      notes,
+    };
+  } catch {
+    return {
+      ok: false,
+      notes: [],
+      error: 'Invalid JSON file format. Please select a valid Keep JSON snapshot.',
+    };
+  }
 }

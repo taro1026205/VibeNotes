@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { User } from 'firebase/auth';
 import {
   X,
@@ -9,6 +9,8 @@ import {
   LogOut,
   CheckCircle2,
   AlertCircle,
+  FileJson,
+  Upload,
 } from 'lucide-react';
 import {
   KeepNoteResource,
@@ -16,7 +18,11 @@ import {
   createGoogleKeepNote,
   deleteGoogleKeepNote,
 } from '../services/keepService';
-import { NoteItem } from '../utils/notesLogic';
+import {
+  NoteItem,
+  exportNotesToKeepJson,
+  parseImportedKeepJson,
+} from '../utils/notesLogic';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface GoogleKeepDrawerProps {
@@ -28,7 +34,9 @@ interface GoogleKeepDrawerProps {
   onSignIn: () => Promise<void>;
   onSignOut: () => Promise<void>;
   activeNote: NoteItem | null;
+  workspaceNotes?: NoteItem[];
   onImportKeepNote: (title: string, content: string, keepResourceName: string) => void;
+  onImportKeepJsonNotes?: (importedNotes: NoteItem[]) => void;
   onUpdateActiveNoteKeepResource: (noteId: string, resourceName: string) => void;
 }
 
@@ -41,7 +49,9 @@ export const GoogleKeepDrawer: React.FC<GoogleKeepDrawerProps> = ({
   onSignIn,
   onSignOut,
   activeNote,
+  workspaceNotes = [],
   onImportKeepNote,
+  onImportKeepJsonNotes,
   onUpdateActiveNoteKeepResource,
 }) => {
   const [keepNotes, setKeepNotes] = useState<KeepNoteResource[]>([]);
@@ -50,6 +60,7 @@ export const GoogleKeepDrawer: React.FC<GoogleKeepDrawerProps> = ({
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [pendingAction, setPendingAction] = useState<{
     type: 'push' | 'delete';
@@ -61,6 +72,75 @@ export const GoogleKeepDrawer: React.FC<GoogleKeepDrawerProps> = ({
   } | null>(null);
 
   if (!isOpen) return null;
+
+  const handleExportKeepJsonSnapshot = () => {
+    const targetNotes =
+      workspaceNotes.length > 0
+        ? workspaceNotes
+        : activeNote
+          ? [activeNote]
+          : [];
+    const jsonString = exportNotesToKeepJson(targetNotes);
+    const blob = new Blob([jsonString], {
+      type: 'application/json;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vibenotes-keep-snapshot-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    setStatusMessage({
+      type: 'success',
+      text: `Exported ${targetNotes.length} note(s) to Keep JSON snapshot.`,
+    });
+  };
+
+  const handleImportKeepJsonFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : '';
+      const result = parseImportedKeepJson(text);
+      if (!result.ok) {
+        setStatusMessage({
+          type: 'error',
+          text: result.error || 'Failed to parse Keep JSON snapshot.',
+        });
+        return;
+      }
+
+      if (onImportKeepJsonNotes) {
+        onImportKeepJsonNotes(result.notes);
+      } else {
+        result.notes.forEach((n) =>
+          onImportKeepNote(
+            n.title,
+            n.content,
+            n.keepResourceName || `notes/${n.id}`
+          )
+        );
+      }
+
+      setStatusMessage({
+        type: 'success',
+        text: `Imported ${result.notes.length} note(s) from Keep JSON snapshot into your workspace.`,
+      });
+    };
+    reader.onerror = () => {
+      setStatusMessage({
+        type: 'error',
+        text: 'Unable to read the selected JSON file.',
+      });
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   const handleFetchKeepNotes = async () => {
     setIsLoading(true);
@@ -164,7 +244,7 @@ export const GoogleKeepDrawer: React.FC<GoogleKeepDrawerProps> = ({
                 Google Keep Sync
               </h2>
               <p className="editorial-label mt-1">
-                Sync Markdown notes with your Google Keep account
+                Sync Markdown notes with Google Keep API or JSON Snapshot
               </p>
             </div>
             <button
@@ -181,10 +261,13 @@ export const GoogleKeepDrawer: React.FC<GoogleKeepDrawerProps> = ({
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {/* Auth Section */}
             <div className="p-5 border border-[var(--ink)] bg-[var(--bg)]">
+              <div className="editorial-label !text-[0.58rem] mb-2">
+                1. Google Keep REST API (Workspace OAuth)
+              </div>
               {needsAuth || !user ? (
                 <div className="space-y-4">
                   <p className="text-xs text-[var(--ink-medium)] leading-relaxed">
-                    Sign in with your Google account to read, create, or delete notes via the Google Keep API.
+                    Sign in with your Google account to read, create, or delete notes via the Google Keep API (`keep.googleapis.com/v1/notes`).
                   </p>
                   <button
                     type="button"
@@ -249,6 +332,49 @@ export const GoogleKeepDrawer: React.FC<GoogleKeepDrawerProps> = ({
               )}
             </div>
 
+            {/* Hybrid Sync Section: Keep JSON Snapshot Import / Export (Works for all @gmail.com accounts) */}
+            <div className="p-5 border border-[var(--ink)] bg-[var(--bg)] space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="editorial-label !text-[0.58rem]">
+                  2. Keep JSON Snapshot (Universal Backup)
+                </span>
+                <FileJson className="w-4 h-4 text-[var(--ink-medium)] shrink-0" />
+              </div>
+              <p className="text-xs text-[var(--ink-medium)] leading-relaxed">
+                Export your workspace notes as a Google Keep-compatible JSON snapshot, or import a Keep JSON file directly (works offline and with standard personal `@gmail.com` accounts).
+              </p>
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                <button
+                  type="button"
+                  data-testid="keep-export-json-button"
+                  onClick={handleExportKeepJsonSnapshot}
+                  aria-label="Export Keep JSON Snapshot"
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 border border-[var(--ink)] bg-[var(--surface)] hover:bg-[var(--ink)] text-[var(--ink)] hover:text-[var(--bg)] text-[0.65rem] font-mono uppercase tracking-wider font-semibold transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export Keep JSON</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="keep-import-json-button"
+                  onClick={() => fileInputRef.current?.click()}
+                  aria-label="Import Keep JSON Snapshot"
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 border border-[var(--ink)] bg-[var(--surface)] hover:bg-[var(--ink)] text-[var(--ink)] hover:text-[var(--bg)] text-[0.65rem] font-mono uppercase tracking-wider font-semibold transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Import Keep JSON</span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleImportKeepJsonFile}
+                  className="hidden"
+                  aria-label="Upload Keep JSON snapshot file"
+                />
+              </div>
+            </div>
+
             {/* Active Note Push Action */}
             {!needsAuth && user && activeNote && (
               <div className="p-5 border border-[var(--ink-faint)] space-y-3">
@@ -284,7 +410,10 @@ export const GoogleKeepDrawer: React.FC<GoogleKeepDrawerProps> = ({
 
             {/* Status Feedback */}
             {statusMessage && (
-              <div className="p-4 border border-[var(--ink)] bg-[var(--bg)] text-xs flex items-start gap-2.5 leading-relaxed">
+              <div
+                role="status"
+                className="p-4 border border-[var(--ink)] bg-[var(--bg)] text-xs flex items-start gap-2.5 leading-relaxed"
+              >
                 {statusMessage.type === 'success' ? (
                   <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-[var(--ink)]" />
                 ) : (

@@ -376,6 +376,75 @@ export const LoginView: React.FC<LoginViewProps> = ({
               </button>
             </form>
 
+            {/* Quick-Fill Evaluator & Student Credentials (Sign In mode) */}
+            {!isSignUp && (
+              <div
+                data-testid="evaluator-credentials-box"
+                className="mt-4 p-3 border border-[var(--ink-faint)] bg-[var(--bg)] space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="editorial-label !text-[0.55rem]">
+                    Quick Access Credentials
+                  </span>
+                  <span className="font-mono text-[0.55rem] text-[var(--ink-medium)]">
+                    1-Click Sign In
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    data-testid="quick-login-demo"
+                    onClick={() => {
+                      setErrorMessage(null);
+                      setEmail('demo@vibenotes.io');
+                      setPassword('demo1234');
+                      setDisplayName('Demo Evaluator');
+                      onLoginSuccess({
+                        name: 'Demo Evaluator',
+                        email: 'demo@vibenotes.io',
+                        provider: 'email',
+                        signedInAt: new Date().toISOString(),
+                        isNewUser: false,
+                      });
+                    }}
+                    className="px-2.5 py-2 border border-[var(--ink)] bg-[var(--surface)] hover:bg-[var(--ink)] text-[var(--ink)] hover:text-[var(--bg)] text-left transition-colors cursor-pointer"
+                  >
+                    <div className="font-mono text-[0.6rem] font-bold uppercase tracking-wider">
+                      Demo Account (4 Notes)
+                    </div>
+                    <div className="font-mono text-[0.55rem] opacity-80 truncate">
+                      demo@vibenotes.io · demo1234
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="quick-login-student"
+                    onClick={() => {
+                      setErrorMessage(null);
+                      setEmail('student@vibenotes.io');
+                      setPassword('student1234');
+                      setDisplayName('Fresh Student Account');
+                      onLoginSuccess({
+                        name: 'Fresh Student Account',
+                        email: 'student@vibenotes.io',
+                        provider: 'email',
+                        signedInAt: new Date().toISOString(),
+                        isNewUser: false,
+                      });
+                    }}
+                    className="px-2.5 py-2 border border-[var(--ink-faint)] hover:border-[var(--ink)] bg-[var(--surface)] hover:bg-[var(--ink)] text-[var(--ink)] hover:text-[var(--bg)] text-left transition-colors cursor-pointer"
+                  >
+                    <div className="font-mono text-[0.6rem] font-bold uppercase tracking-wider">
+                      Fresh Account (0 Notes)
+                    </div>
+                    <div className="font-mono text-[0.55rem] opacity-80 truncate">
+                      student@vibenotes.io · student1234
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Notion-Style Bottom Mode Toggle + Guest Access */}
             <div className="mt-5 pt-4 border-t border-[var(--ink-faint)] space-y-2.5 text-xs">
               <div className="flex items-center justify-between">
