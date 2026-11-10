@@ -262,7 +262,7 @@ Toàn bộ tài liệu của dự án được tổ chức thành **4 phần rõ
    - **[`tests/unit/notesLogic.unit.test.ts`](tests/unit/notesLogic.unit.test.ts)**: 12 Unit Test Suites kiểm thử các hàm logic thuần túy.
    - **[`tests/integration/workspaceFlow.integration.test.ts`](tests/integration/workspaceFlow.integration.test.ts)**: 4 Integration Test Suites kiểm thử luồng nghiệp vụ đầu-cuối.
 
-### Thông tin Truy cập & Mật khẩu Chấm bài (Credentials & Access Control)
+### Thông tin Truy cập & Mật khẩu Dùng thử (Credentials & Access Control)
 
 | Vai trò / Loại Tài khoản | Email Đăng nhập (Tab `Sign In`) | Mật khẩu | Dữ liệu Khởi tạo | Ghi chú cho Giảng viên |
 | :--- | :--- | :--- | :--- | :--- |
